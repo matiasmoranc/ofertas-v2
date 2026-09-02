@@ -28,7 +28,7 @@ function authError(error){
 }
 function setMessage(text="",error=false){ const node=el("authMessage"); if(node){node.textContent=text;node.className="auth-message"+(error?" error":"");} }
 function showGate(mode="login"){
-  document.body.classList.remove("in-lobby");
+  document.body.classList.add("in-lobby");
   el("accountGate")?.classList.remove("screen-hidden");
   el("lobbyScreen")?.classList.add("screen-hidden");
   el("gameScreen")?.classList.add("screen-hidden");
