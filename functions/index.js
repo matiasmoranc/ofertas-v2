@@ -121,10 +121,14 @@ async function applyUserResult(uid,room,entry,outcome,goalsFor,goalsAgainst){
   });
 }
 async function advanceTournament(game,result,winnerUid,winnerName){
-  if(!game.tournamentId || !game.tournamentMatchId || !winnerUid) return;
+  if(!game.tournamentId || !game.tournamentMatchId) return;
   await db.ref(`tournaments/${game.tournamentId}`).transaction(t=>{
     const match=t?.matches?.[game.tournamentMatchId];
     if(!match || match.winnerUid) return t;
+    if(!winnerUid){
+      match.status="ready"; match.roomCode=null; match.draws=Number(match.draws||0)+1;
+      return t;
+    }
     match.winnerUid=winnerUid;match.winnerName=winnerName;match.status="completed";
     match.score={A:result.goalsA,B:result.goalsB};
     if(game.tournamentMatchId==="final"){
