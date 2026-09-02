@@ -1,10 +1,10 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
   signInWithEmailAndPassword, sendPasswordResetEmail, signOut, updateProfile
-} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
-import { getDatabase, ref, get, set, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js";
-import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js";
+} from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
+import { getDatabase, ref, get, set, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-functions.js";
 
 let profile=null, auth=null, db=null, functions=null, stopUser=null, stopTournaments=null;
 let callbacks={};
