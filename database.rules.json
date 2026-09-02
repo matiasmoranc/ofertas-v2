@@ -25,14 +25,14 @@
     "games": {
       "$code": {
         ".read": "auth != null && (data.child('playerAUid').val() === auth.uid || data.child('playerBUid').val() === auth.uid || root.child('openRooms').child($code).exists())",
-        ".write": "auth != null && ((!data.exists() && newData.child('playerAUid').val() === auth.uid) || data.child('playerAUid').val() === auth.uid || data.child('playerBUid').val() === auth.uid || (!data.child('playerBUid').exists() && newData.child('playerBUid').val() === auth.uid))",
+        ".write": "auth != null && ((!data.exists() && newData.child('playerAUid').val() === auth.uid) || data.child('playerAUid').val() === auth.uid || data.child('playerBUid').val() === auth.uid || (!data.child('playerBUid').exists() && newData.child('playerBUid').val() === auth.uid) || (!newData.exists() && ((root.child('openRooms').child($code).child('status').val() === 'waiting' && root.child('openRooms').child($code).child('createdAt').val() < now - 300000) || (root.child('openRooms').child($code).child('status').val() === 'playing' && root.child('openRooms').child($code).child('lastActivity').val() < now - 600000))))",
         ".validate": "!newData.exists() || (newData.child('roomCode').val() === $code && newData.child('playerAUid').isString())"
       }
     },
     "openRooms": {
       ".read": "auth != null",
       "$code": {
-        ".write": "auth != null && (!data.exists() || data.child('ownerUid').val() === auth.uid || root.child('games').child($code).child('playerAUid').val() === auth.uid || root.child('games').child($code).child('playerBUid').val() === auth.uid)",
+        ".write": "auth != null && (!data.exists() || data.child('ownerUid').val() === auth.uid || root.child('games').child($code).child('playerAUid').val() === auth.uid || root.child('games').child($code).child('playerBUid').val() === auth.uid || (!newData.exists() && ((data.child('status').val() === 'waiting' && data.child('createdAt').val() < now - 300000) || (data.child('status').val() === 'playing' && data.child('lastActivity').val() < now - 600000))))",
         "spectators": {
           "$session": {
             ".write": "auth != null && ((!data.exists() && newData.child('uid').val() === auth.uid) || data.child('uid').val() === auth.uid)",
