@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="./v2.css">
 <title>Mercado Élite 5 - Multiplayer</title>
 <style>
 *{
@@ -2188,8 +2189,8 @@ position: fixed;
 </div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
+import { firebaseConfig } from "./firebase-config.js";
+import { startV2App, getV2Profile } from "./v2-app.js";
 import { getDatabase, ref, get, update, onValue, runTransaction, remove, set, onDisconnect } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
 
 /* =================================================
@@ -2201,15 +2202,7 @@ import { getDatabase, ref, get, update, onValue, runTransaction, remove, set, on
 
 
 
-const firebaseConfig = {
-  apiKey: "AIzaSyBqBdyA1dm__wy5jtUXEVJP2s7D1f1WxOw",
-  authDomain: "ofertas-b290c.firebaseapp.com",
-  databaseURL: "https://ofertas-b290c-default-rtdb.firebaseio.com",
-  projectId: "ofertas-b290c",
-  storageBucket: "ofertas-b290c.firebasestorage.app",
-  messagingSenderId: "905121322121",
-  appId: "1:905121322121:web:7533d59396e19a85c2a258"
-};
+
 
 const players = [
 
@@ -2420,6 +2413,7 @@ const lobbyMessage = $("lobbyMessage");
 const firebaseStatus = $("firebaseStatus");
 
 let app = null;
+let currentProfile = null;
 let auth = null;
 let db = null;
 let uid = null;
@@ -2533,6 +2527,8 @@ function freshGameState(code, playerAUid, playerBUid=null, seed=(Date.now()>>>0)
     status: playerBUid ? "playing" : "waiting",
     playerAUid,
     playerBUid,
+    playerAName: currentProfile?.username || getV2Profile()?.username || "Equipo Azul",
+    playerBName: playerBUid ? (currentProfile?.username || getV2Profile()?.username || "Equipo Rojo") : null,
     money: {A:20,B:20},
     teams: {A:[],B:[]},
     usedPlayers: [],
@@ -4149,6 +4145,7 @@ async function startSpectatorPresence(code){
   spectatorDisconnectHandle=onDisconnect(spectatorPresenceRef);
   await spectatorDisconnectHandle.remove();
   await set(spectatorPresenceRef,{
+    uid,
     joinedAt:Date.now()
   });
 }
@@ -4195,6 +4192,22 @@ async function watchOpenRoom(code){
     console.error("Error mirando la sala:",error);
     setLobbyMessage(error.message || "No se pudo abrir el partido.",true);
   }
+}
+
+async function enterTournamentRoom(code){
+  if(!db || !uid || !code) return;
+  const roomRef=ref(db,`games/${code}`);
+  const tx=await runTransaction(roomRef,state=>{
+    if(!state || (state.playerAUid!==uid && state.playerBUid!==uid)) return;
+    if(state.currentPlayerIndex===null || state.currentPlayerIndex===undefined) prepareNextAuctionInState(state,"🏆 Partido de torneo iniciado.");
+    return state;
+  },{applyLocally:false});
+  if(!tx.committed) throw new Error("No se pudo abrir el partido del torneo.");
+  const state=tx.snapshot.val();
+  roomCode=code; myTeam=state.playerAUid===uid?"A":"B"; isSpectator=false;
+  currentRoomIsOpen=false; hasShownTeamIntro=false; gameState=state;
+  history.replaceState(null,"",`${location.pathname}?room=${code}`);
+  enterGameScreen(state); updateScreen(); listenToRoom(code);
 }
 
 async function createRoom(){
@@ -4274,6 +4287,8 @@ async function joinRoom(forcedCode=null, fromOpenRoom=false){
     const state=JSON.parse(JSON.stringify(current));
 
     state.playerBUid=uid;
+    state.playerBName=currentProfile?.username || getV2Profile()?.username || "Equipo Rojo";
+
 
     if(state.status==="waiting"){
       state.status="playing";
@@ -4364,6 +4379,7 @@ function showCreatedRoom(code){
 }
 
 function enterGameScreen(state){
+  document.body.classList.remove("in-lobby");
   lobbyScreen.classList.add("screen-hidden");
   gameScreen.classList.remove("screen-hidden");
   $("gameRoomCode").textContent=roomCode;
@@ -4561,7 +4577,7 @@ function leaveRoom(clearUrl=true, closeActiveMatch=false){
   currentRoomIsOpen=false;
   hasShownTeamIntro=false;
   roomCode=null; myTeam=null; isSpectator=false; gameState=null; openedMiniTeam=null; lastAuctionKey="";
-  gameScreen.classList.add("screen-hidden"); lobbyScreen.classList.remove("screen-hidden"); $("roomReady").classList.add("screen-hidden");
+  gameScreen.classList.add("screen-hidden"); lobbyScreen.classList.remove("screen-hidden"); document.body.classList.add("in-lobby"); $("roomReady").classList.add("screen-hidden");
   if($("connectionBar")) $("connectionBar").classList.remove("hidden");
   if(clearUrl) history.replaceState(null,"",location.pathname);
 }
@@ -4596,31 +4612,16 @@ $("miniBriefingButton")?.addEventListener("click",dismissMiniBriefing);
 $("leaveRoomButton").addEventListener("click",()=>leaveRoom(true,true));
 
 async function boot(){
-  if(!firebaseConfigured()){
-    firebaseStatus.textContent="⚠️ Falta pegar firebaseConfig. El HTML ya está preparado; seguí los pasos que te voy a indicar.";
-    firebaseStatus.className="firebase-status error";
-    setLobbyMessage("Primero configurá Firebase y pegá los datos en firebaseConfig.",true);
-    $("createRoomButton").disabled=true; $("createOpenRoomButton").disabled=true; $("joinRoomButton").disabled=true;
-    return;
-  }
-  try{
-    app=initializeApp(firebaseConfig); auth=getAuth(app); db=getDatabase(app);
-    firebaseStatus.textContent="✅ Firebase configurado. Iniciando sesión anónima..."; firebaseStatus.className="firebase-status ok";
-    onAuthStateChanged(auth,async user=>{
-      if(user){
-        uid=user.uid;
-        firebaseStatus.textContent="✅ Firebase conectado";
-        firebaseStatus.className="firebase-status ok";
-        setLobbyMessage("Creá una sala, publicá una mesa abierta o ingresá el código de tu rival.");
-        loadSavedTableName();
-        listenToOpenRooms();
-        await tryResumeFromUrl();
-      }
-    });
-    await signInAnonymously(auth);
-  }catch(error){
-    console.error(error); firebaseStatus.textContent="❌ Error Firebase: "+error.message; firebaseStatus.className="firebase-status error"; setLobbyMessage("Revisá la configuración, Authentication y Realtime Database.",true);
-  }
+  await startV2App(firebaseConfig,{
+    onReady:async ({app:readyApp,auth:readyAuth,db:readyDb,user,profile})=>{
+      app=readyApp; auth=readyAuth; db=readyDb; uid=user.uid; currentProfile=profile;
+      if(firebaseStatus){firebaseStatus.textContent="✅ Firebase conectado como @"+profile.username;firebaseStatus.className="firebase-status ok";}
+      setLobbyMessage("Creá una sala, publicá una mesa abierta o ingresá el código de tu rival.");
+      loadSavedTableName(); listenToOpenRooms(); await tryResumeFromUrl();
+    },
+    onSignedOut:()=>{uid=null;currentProfile=null;if(roomCode)leaveRoom(true,false);},
+    onTournamentRoom:enterTournamentRoom
+  });
 }
 
 boot();
