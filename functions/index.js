@@ -78,23 +78,29 @@ exports.openTournamentMatch=onCall(async request=>{
   const uid=requireAuth(request);
   const tournamentId=cleanText(request.data?.tournamentId,80);
   const matchId=cleanText(request.data?.matchId,30);
-  const tRef=db.ref(`tournaments/${tournamentId}`);
-  const snap=await tRef.get(), tournament=snap.val(), match=tournament?.matches?.[matchId];
-  if(!match) throw new HttpsError("not-found","No existe ese partido.");
-  if(![match.playerAUid,match.playerBUid].includes(uid)) throw new HttpsError("permission-denied","No participás de este partido.");
-  if(!["ready","playing"].includes(match.status) || match.winnerUid) throw new HttpsError("failed-precondition","Ese partido no está disponible.");
-  if(match.roomCode){
-    const game=await db.ref(`games/${match.roomCode}`).get();
-    if(game.exists()) return {roomCode:match.roomCode};
-  }
-  const code=roomCode();
-  const a={uid:match.playerAUid,username:match.playerAName};
-  const b={uid:match.playerBUid,username:match.playerBName};
-  await db.ref().update({
-    [`games/${code}`]:baseTournamentGame(code,a,b,tournamentId,matchId),
-    [`tournaments/${tournamentId}/matches/${matchId}/roomCode`]:code,
-    [`tournaments/${tournamentId}/matches/${matchId}/status`]:"playing"
+  const matchRef=db.ref(`tournaments/${tournamentId}/matches/${matchId}`);
+  const initial=(await matchRef.get()).val();
+  if(!initial) throw new HttpsError("not-found","No existe ese partido.");
+  if(![initial.playerAUid,initial.playerBUid].includes(uid)) throw new HttpsError("permission-denied","No participás de este partido.");
+  if(!["ready","playing"].includes(initial.status) || initial.winnerUid) throw new HttpsError("failed-precondition","Ese partido no está disponible.");
+
+  const proposedCode=roomCode();
+  const locked=await matchRef.transaction(match=>{
+    if(!match || match.winnerUid || !["ready","playing"].includes(match.status)) return;
+    if(!match.roomCode) match.roomCode=proposedCode;
+    match.status="playing";
+    return match;
   });
+  if(!locked.committed) throw new HttpsError("aborted","El cruce cambió. Actualizá e intentá nuevamente.");
+  const match=locked.snapshot.val(), code=match.roomCode;
+  const gameRef=db.ref(`games/${code}`);
+  const gameTx=await gameRef.transaction(current=>current||baseTournamentGame(
+    code,
+    {uid:match.playerAUid,username:match.playerAName},
+    {uid:match.playerBUid,username:match.playerBName},
+    tournamentId,matchId
+  ));
+  if(!gameTx.committed) throw new HttpsError("internal","No se pudo preparar la partida.");
   return {roomCode:code};
 });
 
