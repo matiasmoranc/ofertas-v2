@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   deploy:
-    name: Publicar ofertas-v2
+    name: Publicar mercado5
     runs-on: ubuntu-latest
     steps:
       - name: Descargar código
