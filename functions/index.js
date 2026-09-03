@@ -9,6 +9,11 @@ const db=getDatabase();
 function cleanText(value,max=28){
   return String(value||"").trim().replace(/[<>]/g,"").slice(0,max);
 }
+function tournamentNameKey(value=""){
+  const normalized=String(value).trim().toLowerCase().normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ");
+  return Buffer.from(normalized,"utf8").toString("base64url");
+}
 function roomCode(){
   const chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let out="";
@@ -57,11 +62,28 @@ exports.resolveLoginEmail=onCall(async request=>{
 exports.createTournament=onCall(async request=>{
   const uid=requireAuth(request), name=cleanText(request.data?.name);
   if(name.length<3) throw new HttpsError("invalid-argument","El nombre debe tener al menos 3 caracteres.");
+
+  const nameKey=tournamentNameKey(name);
+  const existing=(await db.ref("tournaments").get()).val()||{};
+  const duplicate=Object.values(existing).some(t=>tournamentNameKey(t?.name)===nameKey);
+  if(duplicate) throw new HttpsError("already-exists","Ya existe un torneo con ese nombre.");
+
   const p=await profileFor(uid), tournamentRef=db.ref("tournaments").push();
-  await tournamentRef.set({
-    name,ownerUid:uid,status:"waiting",createdAt:Date.now(),
-    participants:{[uid]:{uid,username:p.username,joinedAt:Date.now()}}
-  });
+  const nameRef=db.ref(`tournamentNames/${nameKey}`);
+  const claimed=await nameRef.transaction(current=>current===null?tournamentRef.key:undefined);
+  if(!claimed.committed){
+    throw new HttpsError("already-exists","Ya existe un torneo con ese nombre.");
+  }
+
+  try{
+    await tournamentRef.set({
+      name,nameKey,ownerUid:uid,status:"waiting",createdAt:Date.now(),
+      participants:{[uid]:{uid,username:p.username,joinedAt:Date.now()}}
+    });
+  }catch(error){
+    await nameRef.transaction(current=>current===tournamentRef.key?null:current);
+    throw error;
+  }
   return {tournamentId:tournamentRef.key};
 });
 
@@ -78,6 +100,12 @@ exports.deleteTournament=onCall(async request=>{
   // El propietario ya fue validado contra el estado actual del torneo.
   // remove() evita que una eliminación válida quede marcada como transacción abortada.
   await target.remove();
+  const nameKey=initial.nameKey||tournamentNameKey(initial.name);
+  if(nameKey){
+    await db.ref(`tournamentNames/${nameKey}`).transaction(
+      current=>current===tournamentId?null:current
+    );
+  }
 
   const cleanup={};
   Object.values(initial.matches||{}).forEach(match=>{
