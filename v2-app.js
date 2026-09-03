@@ -247,8 +247,7 @@ function bindUI(){
       if(open){msg.textContent="Preparando partido...";const result=await httpsCallable(functions,"openTournamentMatch")({tournamentId:open.dataset.openTournament,matchId:open.dataset.match});await callbacks.onTournamentRoom?.(result.data.roomCode);}
       if(remove){
         const card=remove.closest(".tournament-item"), name=card?.querySelector(".tournament-name")?.textContent||"este torneo";
-        if(!confirm(`¿Querés eliminar “${name}”?\n\nSolo el creador puede hacerlo.`)) return;
-        if(!confirm(`Última confirmación: ¿eliminar definitivamente “${name}”?\n\nSe cerrarán sus partidos abiertos y esta acción no se puede deshacer.`)) return;
+        if(!confirm(`¿Eliminar definitivamente “${name}”?\n\nSe cerrarán sus partidos abiertos y esta acción no se puede deshacer.`)) return;
         remove.disabled=true; msg.textContent="Eliminando torneo...";
         await httpsCallable(functions,"deleteTournament")({tournamentId:remove.dataset.deleteTournament});
       }
