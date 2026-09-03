@@ -188,7 +188,7 @@ function tournamentBracket(id,t){
     </div>`;
 }
 function tournamentCard(id,t){
-  const participants=Object.values(t.participants||{}), joined=participants.some(p=>p.uid===auth.currentUser?.uid);
+  const participants=Object.values(t.participants||{}), joined=participants.some(p=>p.uid===auth.currentUser?.uid), isOwner=t.ownerUid===auth.currentUser?.uid;
   const status={waiting:"ESPERANDO",semifinals:"SEMIFINALES",final:"FINAL",completed:"FINALIZADO"}[t.status]||"TORNEO";
   const waitingSlots=t.status==="waiting"?`<div class="waiting-slots">${[0,1,2,3].map((_,index)=>{
     const player=participants[index];
@@ -197,7 +197,7 @@ function tournamentCard(id,t){
   return `<div class="tournament-item tournament-fixture">
     <div class="tournament-row">
       <div><strong class="tournament-name">${esc(t.name||"Torneo")}</strong><div class="item-meta">${status} · ${participants.length}/4 jugadores</div></div>
-      ${t.status==="waiting"&&!joined?`<button class="small-action" data-join-tournament="${esc(id)}">UNIRME</button>`:""}
+      <div class="tournament-actions">${t.status==="waiting"&&!joined?`<button class="small-action" data-join-tournament="${esc(id)}">UNIRME</button>`:""}${isOwner?`<button class="small-action danger" data-delete-tournament="${esc(id)}" title="Eliminar torneo">ELIMINAR</button>`:""}</div>
     </div>
     ${waitingSlots}
     ${t.matches?tournamentBracket(id,t):""}
@@ -239,12 +239,19 @@ function bindUI(){
   el("resetPassword").onclick=async()=>{const email=el("loginEmail").value.trim();if(!email)return setMessage("Escribí tu correo primero.",true);try{await sendPasswordResetEmail(auth,email);setMessage("Te enviamos un correo para cambiar la contraseña.");}catch(err){setMessage(authError(err),true);}};
   el("logoutButton").onclick=()=>signOut(auth);
   el("tournamentsPanelContent").addEventListener("click",async e=>{
-    const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), open=e.target.closest("[data-open-tournament]");
+    const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), open=e.target.closest("[data-open-tournament]"), remove=e.target.closest("[data-delete-tournament]");
     const msg=el("tournamentMessage");
     try{
       if(create){const name=el("tournamentName").value.trim();if(name.length<3)throw new Error("Escribí un nombre para el torneo.");msg.textContent="Creando torneo...";await httpsCallable(functions,"createTournament")({name});}
       if(join){msg.textContent="Uniéndote...";await httpsCallable(functions,"joinTournament")({tournamentId:join.dataset.joinTournament});}
       if(open){msg.textContent="Preparando partido...";const result=await httpsCallable(functions,"openTournamentMatch")({tournamentId:open.dataset.openTournament,matchId:open.dataset.match});await callbacks.onTournamentRoom?.(result.data.roomCode);}
+      if(remove){
+        const card=remove.closest(".tournament-item"), name=card?.querySelector(".tournament-name")?.textContent||"este torneo";
+        if(!confirm(`¿Querés eliminar “${name}”?\n\nSolo el creador puede hacerlo.`)) return;
+        if(!confirm(`Última confirmación: ¿eliminar definitivamente “${name}”?\n\nSe cerrarán sus partidos abiertos y esta acción no se puede deshacer.`)) return;
+        remove.disabled=true; msg.textContent="Eliminando torneo...";
+        await httpsCallable(functions,"deleteTournament")({tournamentId:remove.dataset.deleteTournament});
+      }
       if(msg) msg.textContent="";
     }catch(err){if(msg){msg.textContent=err?.message||"No se pudo completar la acción.";msg.className="auth-message error";}}
   });
