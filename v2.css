@@ -7,3 +7,17 @@
 @keyframes trophy-soft-spin{0%{transform:rotateY(0deg)}100%{transform:rotateY(360deg)}}
 @media(prefers-reduced-motion:reduce){.rotating-trophy{animation:none}}
 @media(max-width:380px){.elimination-bracket{grid-template-columns:minmax(0,1.3fr) 20px minmax(0,1fr)}.bracket-player-row{font-size:8px}.elimination-match{padding-left:5px;padding-right:5px}}
+
+/* Pantalla inicial mientras Firebase recupera la sesión */
+.boot-loader{display:none;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;flex-direction:column;background:radial-gradient(circle at 50% 28%,#174a2d 0%,#07150d 42%,#020704 100%);color:white;text-align:center}
+body.auth-loading{overflow:hidden}
+body.auth-loading .app{visibility:hidden}
+body.auth-loading .boot-loader{display:flex}
+.boot-ball-stage{position:relative;width:92px;height:125px;margin-bottom:18px}
+.boot-ball{position:absolute;top:0;left:21px;display:block;font-size:48px;line-height:1;transform-origin:center;animation:boot-ball-bounce 1.05s cubic-bezier(.45,.05,.55,.95) infinite}
+.boot-ball-shadow{position:absolute;bottom:2px;left:24px;width:44px;height:10px;border-radius:50%;background:rgba(0,0,0,.55);filter:blur(2px);animation:boot-shadow 1.05s ease-in-out infinite}
+.boot-loader strong{font-size:14px;letter-spacing:2px;color:#dfff9d}
+.boot-loader small{margin-top:7px;color:#83988b;font-size:11px}
+@keyframes boot-ball-bounce{0%,100%{transform:translateY(72px) scaleX(1.08) scaleY(.92) rotate(0deg)}45%{transform:translateY(0) scale(1) rotate(155deg)}55%{transform:translateY(0) scale(1) rotate(180deg)}}
+@keyframes boot-shadow{0%,100%{transform:scaleX(1);opacity:.55}45%,55%{transform:scaleX(.42);opacity:.2}}
+@media(prefers-reduced-motion:reduce){.boot-ball,.boot-ball-shadow{animation:none}.boot-ball{transform:translateY(36px)}}
