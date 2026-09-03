@@ -13,6 +13,11 @@ let callbacks={};
 export function getV2Profile(){ return profile; }
 
 function el(id){ return document.getElementById(id); }
+function finishBootLoading(){
+  document.body.classList.remove("auth-loading");
+  const loader=el("appBootLoader");
+  if(loader) loader.setAttribute("aria-hidden","true");
+}
 function esc(value=""){ return String(value).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function usernameKey(value=""){ return value.trim().toLowerCase(); }
 function validUsername(value=""){ return /^[a-zA-Z0-9_]{3,16}$/.test(value.trim()); }
@@ -29,6 +34,7 @@ function authError(error){
 }
 function setMessage(text="",error=false){ const node=el("authMessage"); if(node){node.textContent=text;node.className="auth-message"+(error?" error":"");} }
 function showGate(mode="login"){
+  finishBootLoading();
   document.body.classList.add("in-lobby");
   el("accountGate")?.classList.remove("screen-hidden");
   el("lobbyScreen")?.classList.add("screen-hidden");
@@ -40,6 +46,7 @@ function showGate(mode="login"){
   setMessage("");
 }
 function showLobby(){
+  finishBootLoading();
   document.body.classList.add("in-lobby");
   el("accountGate")?.classList.add("screen-hidden");
   el("lobbyScreen")?.classList.remove("screen-hidden");
@@ -252,7 +259,7 @@ export async function startV2App(config,handlers={}){
   const remembered=localStorage.getItem("ofertasV2LastLogin");
   if(remembered && el("loginEmail")) el("loginEmail").value=remembered;
   onAuthStateChanged(auth,async user=>{
-    if(user){try{await finishLogin(user);}catch(err){setMessage(authError(err),true);}}
+    if(user){try{await finishLogin(user);}catch(err){showGate("login");setMessage(authError(err),true);}}
     else{profile=null;if(stopUser)stopUser();if(stopTournaments)stopTournaments();showGate("login");callbacks.onSignedOut?.();}
   });
 }
