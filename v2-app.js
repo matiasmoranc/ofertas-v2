@@ -1,7 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
-  signInWithEmailAndPassword, sendPasswordResetEmail, signOut, updateProfile
+  signInWithEmailAndPassword, sendPasswordResetEmail, signOut, updateProfile,
+  setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
 import { getDatabase, ref, get, set, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-functions.js";
@@ -53,7 +54,7 @@ function injectUI(){
       <div class="account-brand"><h2>Tu cuenta de jugador</h2><p>Guardá tus estadísticas, rivales y torneos en todos tus dispositivos.</p></div>
       <div class="auth-tabs"><button id="loginTab" class="auth-tab active">INGRESAR</button><button id="registerTab" class="auth-tab">CREAR CUENTA</button></div>
       <form id="loginForm" class="auth-form">
-        <label>CORREO</label><input id="loginEmail" class="auth-input" type="email" autocomplete="email" required>
+        <label>USUARIO O CORREO</label><input id="loginEmail" class="auth-input" type="text" autocomplete="username" placeholder="Tu usuario o correo" required>
         <label>CONTRASEÑA</label><input id="loginPassword" class="auth-input" type="password" autocomplete="current-password" required>
         <button class="lobby-button" type="submit">INGRESAR</button><button id="resetPassword" class="auth-help" type="button">Olvidé mi contraseña</button>
       </form>
@@ -171,7 +172,20 @@ async function finishLogin(user){
 function bindUI(){
   el("loginTab").onclick=()=>showGate("login"); el("registerTab").onclick=()=>showGate("register");
   document.querySelectorAll(".dashboard-tab").forEach(b=>b.onclick=()=>switchPanel(b.dataset.panel));
-  el("loginForm").onsubmit=async e=>{e.preventDefault();setMessage("Ingresando...");try{await signInWithEmailAndPassword(auth,el("loginEmail").value.trim(),el("loginPassword").value);}catch(err){setMessage(authError(err),true);}};
+  el("loginForm").onsubmit=async e=>{
+    e.preventDefault();
+    const identifier=el("loginEmail").value.trim();
+    setMessage("Ingresando...");
+    try{
+      localStorage.setItem("ofertasV2LastLogin",identifier);
+      let email=identifier;
+      if(!identifier.includes("@")){
+        const resolved=await httpsCallable(functions,"resolveLoginEmail")({identifier});
+        email=resolved.data.email;
+      }
+      await signInWithEmailAndPassword(auth,email,el("loginPassword").value);
+    }catch(err){setMessage(authError(err),true);}
+  };
   el("registerForm").onsubmit=async e=>{e.preventDefault();const pass=el("registerPassword").value;if(pass!==el("registerPassword2").value)return setMessage("Las contraseñas no coinciden.",true);try{setMessage("Creando cuenta...");const cred=await createUserWithEmailAndPassword(auth,el("registerEmail").value.trim(),pass);await claimUsername(cred.user,el("registerUsername").value);await finishLogin(cred.user);}catch(err){setMessage(authError(err),true);}};
   el("finishProfileForm").onsubmit=async e=>{e.preventDefault();try{setMessage("Guardando nombre...");await claimUsername(auth.currentUser,el("finishUsername").value);await finishLogin(auth.currentUser);}catch(err){setMessage(authError(err),true);}};
   el("resetPassword").onclick=async()=>{const email=el("loginEmail").value.trim();if(!email)return setMessage("Escribí tu correo primero.",true);try{await sendPasswordResetEmail(auth,email);setMessage("Te enviamos un correo para cambiar la contraseña.");}catch(err){setMessage(authError(err),true);}};
@@ -188,9 +202,13 @@ function bindUI(){
   });
 }
 export async function startV2App(config,handlers={}){
-  callbacks=handlers; injectUI(); bindUI();
-  if(!configured(config)){showGate("login");setMessage("Falta configurar el nuevo proyecto Firebase en firebase-config.js.",true);return;}
+  callbacks=handlers; injectUI();
+  if(!configured(config)){bindUI();showGate("login");setMessage("Falta configurar el nuevo proyecto Firebase en firebase-config.js.",true);return;}
   const app=initializeApp(config); auth=getAuth(app); db=getDatabase(app); functions=getFunctions(app);
+  await setPersistence(auth,browserLocalPersistence);
+  bindUI();
+  const remembered=localStorage.getItem("ofertasV2LastLogin");
+  if(remembered && el("loginEmail")) el("loginEmail").value=remembered;
   onAuthStateChanged(auth,async user=>{
     if(user){try{await finishLogin(user);}catch(err){setMessage(authError(err),true);}}
     else{profile=null;if(stopUser)stopUser();if(stopTournaments)stopTournaments();showGate("login");callbacks.onSignedOut?.();}
