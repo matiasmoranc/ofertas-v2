@@ -24,7 +24,7 @@
     },
     "games": {
       "$code": {
-        ".read": "auth != null && (data.child('playerAUid').val() === auth.uid || data.child('playerBUid').val() === auth.uid || root.child('openRooms').child($code).exists())",
+        ".read": "auth != null && (!data.exists() || data.child('playerAUid').val() === auth.uid || data.child('playerBUid').val() === auth.uid || root.child('openRooms').child($code).exists())",
         ".write": "auth != null && ((!data.exists() && newData.child('playerAUid').val() === auth.uid) || data.child('playerAUid').val() === auth.uid || data.child('playerBUid').val() === auth.uid || (!data.child('playerBUid').exists() && newData.child('playerBUid').val() === auth.uid) || (!newData.exists() && ((root.child('openRooms').child($code).child('status').val() === 'waiting' && root.child('openRooms').child($code).child('createdAt').val() < now - 300000) || (root.child('openRooms').child($code).child('status').val() === 'playing' && root.child('openRooms').child($code).child('lastActivity').val() < now - 600000))))",
         ".validate": "!newData.exists() || (newData.child('roomCode').val() === $code && newData.child('playerAUid').isString())"
       }
