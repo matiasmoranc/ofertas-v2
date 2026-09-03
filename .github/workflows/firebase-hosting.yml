@@ -1,4 +1,4 @@
-name: Publicar Firebase Hosting
+name: Publicar Firebase
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: firebase-hosting-live
+  group: firebase-live
   cancel-in-progress: true
 
 jobs:
@@ -21,10 +21,18 @@ jobs:
       - name: Descargar código
         uses: actions/checkout@v4
 
-      - name: Publicar en Firebase Hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
+      - name: Preparar Node.js
+        uses: actions/setup-node@v4
         with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_OFERTAS_V2 }}
-          channelId: live
-          projectId: ofertas-v2
+          node-version: 20
+
+      - name: Autenticar Firebase
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_OFERTAS_V2 }}
+
+      - name: Instalar dependencias de funciones
+        run: npm ci --prefix functions
+
+      - name: Publicar Hosting, reglas y funciones
+        run: npx --yes firebase-tools@latest deploy --only hosting,database,functions --project ofertas-v2 --non-interactive
