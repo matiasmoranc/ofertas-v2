@@ -1,0 +1,43 @@
+name: Publicar funciones de Firebase
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "functions/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-functions-live
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Publicar funciones
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: functions
+        run: npm ci
+
+      - name: Autenticar en Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_OFERTAS_V2 }}
+
+      - name: Publicar Cloud Functions
+        run: npx --yes firebase-tools@latest deploy --only functions --project ofertas-v2 --force
