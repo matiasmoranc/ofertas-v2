@@ -65,14 +65,23 @@ exports.createTournament=onCall(async request=>{
 
   const nameKey=tournamentNameKey(name);
   const existing=(await db.ref("tournaments").get()).val()||{};
-  const duplicate=Object.values(existing).some(t=>tournamentNameKey(t?.name)===nameKey);
-  if(duplicate) throw new HttpsError("already-exists","Ya existe un torneo con ese nombre.");
+  const duplicate=Object.values(existing).some(t=>
+    t?.status!=="completed" && tournamentNameKey(t?.name)===nameKey
+  );
+  if(duplicate) throw new HttpsError("already-exists","Ya existe un torneo activo con ese nombre.");
 
   const p=await profileFor(uid), tournamentRef=db.ref("tournaments").push();
   const nameRef=db.ref(`tournamentNames/${nameKey}`);
+  const reservedId=(await nameRef.get()).val();
+  if(reservedId){
+    const reservedTournament=(await db.ref(`tournaments/${reservedId}`).get()).val();
+    if(!reservedTournament || reservedTournament.status==="completed"){
+      await nameRef.transaction(current=>current===reservedId?null:current);
+    }
+  }
   const claimed=await nameRef.transaction(current=>current===null?tournamentRef.key:undefined);
   if(!claimed.committed){
-    throw new HttpsError("already-exists","Ya existe un torneo con ese nombre.");
+    throw new HttpsError("already-exists","Ya existe un torneo activo con ese nombre.");
   }
 
   try{
@@ -221,7 +230,8 @@ async function applyUserResult(uid,room,entry,outcome,goalsFor,goalsAgainst){
 }
 async function advanceTournament(game,result,winnerUid,winnerName){
   if(!game.tournamentId || !game.tournamentMatchId) return;
-  await db.ref(`tournaments/${game.tournamentId}`).transaction(t=>{
+  const tournamentRef=db.ref(`tournaments/${game.tournamentId}`);
+  const advanced=await tournamentRef.transaction(t=>{
     const match=t?.matches?.[game.tournamentMatchId];
     if(!match || match.winnerUid) return t;
     if(!winnerUid){
@@ -241,6 +251,25 @@ async function advanceTournament(game,result,winnerUid,winnerName){
     }
     return t;
   });
+
+  const tournament=advanced.snapshot.val();
+  if(game.tournamentMatchId!=="final" || !winnerUid || tournament?.status!=="completed") return;
+
+  const nameKey=tournament.nameKey||tournamentNameKey(tournament.name);
+  await Promise.all([
+    nameKey?db.ref(`tournamentNames/${nameKey}`).transaction(
+      current=>current===game.tournamentId?null:current
+    ):Promise.resolve(),
+    db.ref(`users/${winnerUid}`).transaction(user=>{
+      if(!user) return;
+      user.appliedTournaments=user.appliedTournaments||{};
+      if(user.appliedTournaments[game.tournamentId]) return user;
+      user.appliedTournaments[game.tournamentId]=true;
+      user.stats={played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,tournamentsWon:0,...(user.stats||{})};
+      user.stats.tournamentsWon=Number(user.stats.tournamentsWon||0)+1;
+      return user;
+    })
+  ]);
 }
 
 exports.recordOfficialResult=onValueCreated("/games/{room}/result",async event=>{
