@@ -2550,6 +2550,7 @@ function freshGameState(code, playerAUid, playerBUid=null, seed=(Date.now()>>>0)
     forceOpeningBid: false,
     goalkeeperPhase: true,
     rngSeed: seed,
+    matchInstanceId: `${code}-${Date.now()}-${seed}`,
     result: null,
     miniMatch: null,
     message: playerBUid ? "🧤 Comienza la fase obligatoria de arqueros." : "Esperando al Equipo B..."
