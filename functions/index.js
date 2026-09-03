@@ -37,6 +37,23 @@ function baseTournamentGame(code,a,b,tournamentId,matchId){
   };
 }
 
+exports.resolveLoginEmail=onCall(async request=>{
+  const identifier=cleanText(request.data?.identifier,80).toLowerCase();
+  if(!/^[a-z0-9_]{3,16}$/.test(identifier)){
+    throw new HttpsError("invalid-argument","Ingresá un usuario o correo válido.");
+  }
+  const uidSnap=await db.ref(`usernames/${identifier}`).get();
+  if(!uidSnap.exists()){
+    throw new HttpsError("not-found","Usuario o contraseña incorrectos.");
+  }
+  const emailSnap=await db.ref(`users/${uidSnap.val()}/profile/email`).get();
+  const email=emailSnap.val();
+  if(!email){
+    throw new HttpsError("not-found","Usuario o contraseña incorrectos.");
+  }
+  return {email};
+});
+
 exports.createTournament=onCall(async request=>{
   const uid=requireAuth(request), name=cleanText(request.data?.name);
   if(name.length<3) throw new HttpsError("invalid-argument","El nombre debe tener al menos 3 caracteres.");
