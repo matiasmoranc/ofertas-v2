@@ -21,3 +21,9 @@ body.auth-loading .boot-loader{display:flex}
 @keyframes boot-ball-bounce{0%,100%{transform:translateY(72px) scaleX(1.08) scaleY(.92) rotate(0deg)}45%{transform:translateY(0) scale(1) rotate(155deg)}55%{transform:translateY(0) scale(1) rotate(180deg)}}
 @keyframes boot-shadow{0%,100%{transform:scaleX(1);opacity:.55}45%,55%{transform:scaleX(.42);opacity:.2}}
 @media(prefers-reduced-motion:reduce){.boot-ball,.boot-ball-shadow{animation:none}.boot-ball{transform:translateY(36px)}}
+
+/* Acciones del creador del torneo */
+.tournament-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+.small-action.danger{background:rgba(190,42,42,.18);color:#ff9b9b;border:1px solid rgba(255,105,105,.35)}
+.small-action.danger:hover{background:rgba(190,42,42,.32)}
+.small-action:disabled{opacity:.55;cursor:wait}
