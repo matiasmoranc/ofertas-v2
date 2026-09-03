@@ -32,7 +32,7 @@ jobs:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_OFERTAS_V2 }}
 
       - name: Instalar dependencias de funciones
-        run: npm ci --prefix functions
+        run: npm install --prefix functions
 
       - name: Publicar Hosting, reglas y funciones
         run: npx --yes firebase-tools@latest deploy --only hosting,database,functions --project ofertas-v2 --non-interactive
