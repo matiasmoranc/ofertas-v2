@@ -120,7 +120,7 @@ function switchPanel(id){
   document.querySelectorAll(".account-panel").forEach(x=>x.classList.toggle("active",x.id===id));
   document.querySelectorAll(".dashboard-tab").forEach(x=>x.classList.toggle("active",x.dataset.panel===id));
 }
-function statsOf(data){ return {played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,...(data||{})}; }
+function statsOf(data){ return {played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,tournamentsWon:0,...(data||{})}; }
 function renderProfile(userData={}){
   const p=userData.profile||profile||{}, s=statsOf(userData.stats);
   profile=p;
@@ -136,14 +136,16 @@ function renderProfile(userData={}){
       <div class="profile-stat"><strong>${s.lost}</strong><span>PERDIDOS</span></div>
       <div class="profile-stat"><strong>${points}</strong><span>PUNTOS</span></div>
       <div class="profile-stat"><strong>${avg}</strong><span>GOLES/PARTIDO</span></div>
+      <div class="profile-stat tournament-stat"><strong>🏆 ${s.tournamentsWon}</strong><span>TORNEOS GANADOS</span></div>
     </div>`;
-  renderHistory(userData.history||{});
+  renderHistory(userData.history||{},s);
 }
-function renderHistory(history){
+function renderHistory(history,stats={}){
   const node=el("historyPanelContent"); if(!node) return;
   const items=Object.values(history||{}).sort((a,b)=>(b.finishedAt||0)-(a.finishedAt||0));
-  if(!items.length){node.innerHTML='<div class="empty-state">Todavía no jugaste partidos registrados.</div>';return;}
-  node.innerHTML='<div class="history-list">'+items.map(m=>{
+  const trophy=`<div class="tournament-wins-summary"><span>🏆</span><div><strong>${Number(stats.tournamentsWon||0)}</strong><small>TORNEOS GANADOS</small></div></div>`;
+  if(!items.length){node.innerHTML=trophy+'<div class="empty-state">Todavía no jugaste partidos registrados.</div>';return;}
+  node.innerHTML=trophy+'<div class="history-list">'+items.map(m=>{
     const cls=m.outcome==="win"?"outcome-win":m.outcome==="loss"?"outcome-loss":"outcome-draw";
     const label=m.outcome==="win"?"VICTORIA":m.outcome==="loss"?"DERROTA":"EMPATE";
     return `<div class="history-item"><div class="history-row"><div><strong>vs ${esc(m.opponentName||"Rival")}</strong><div class="item-meta">${new Date(m.finishedAt||Date.now()).toLocaleDateString("es-UY")}${m.tournamentName?" · "+esc(m.tournamentName):""}</div></div><div style="text-align:right"><div class="history-score">${m.myGoals} - ${m.opponentGoals}</div><small class="${cls}">${label}</small></div></div></div>`;
