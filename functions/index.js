@@ -66,29 +66,52 @@ exports.createTournament=onCall(async request=>{
 });
 
 exports.joinTournament=onCall(async request=>{
-  const uid=requireAuth(request), tournamentId=cleanText(request.data?.tournamentId,80);
+  const uid=requireAuth(request);
+  const tournamentId=cleanText(request.data?.tournamentId,80);
   if(!tournamentId) throw new HttpsError("invalid-argument","Falta el torneo.");
-  const p=await profileFor(uid), target=db.ref(`tournaments/${tournamentId}`);
-  const tx=await target.transaction(t=>{
-    if(!t || t.status!=="waiting") return;
-    t.participants=t.participants||{};
-    if(t.participants[uid]) return t;
-    if(Object.keys(t.participants).length>=4) return;
-    t.participants[uid]={uid,username:p.username,joinedAt:Date.now()};
-    const people=Object.values(t.participants).sort((a,b)=>a.joinedAt-b.joinedAt);
-    if(people.length===4){
+
+  const p=await profileFor(uid);
+  const target=db.ref(`tournaments/${tournamentId}`);
+  const initial=(await target.get()).val();
+
+  if(!initial) throw new HttpsError("not-found","El torneo ya no existe.");
+  if(initial.status!=="waiting") throw new HttpsError("failed-precondition","El torneo ya comenzó.");
+
+  const participantsRef=target.child("participants");
+  const joined=await participantsRef.transaction(participants=>{
+    participants=participants||{};
+    if(participants[uid]) return participants;
+    if(Object.keys(participants).length>=4) return;
+    participants[uid]={uid,username:p.username,joinedAt:Date.now()};
+    return participants;
+  });
+
+  if(!joined.committed){
+    throw new HttpsError("resource-exhausted","El torneo ya tiene cuatro jugadores.");
+  }
+
+  const people=Object.values(joined.snapshot.val()||{}).sort((a,b)=>a.joinedAt-b.joinedAt);
+  if(!people.some(player=>player.uid===uid)){
+    throw new HttpsError("resource-exhausted","El torneo ya tiene cuatro jugadores.");
+  }
+
+  if(people.length===4){
+    await target.transaction(t=>{
+      if(!t || t.status!=="waiting" || t.matches) return t;
+      const ordered=Object.values(t.participants||{}).sort((a,b)=>a.joinedAt-b.joinedAt);
+      if(ordered.length!==4) return t;
       t.status="semifinals";
       t.startedAt=Date.now();
       t.matches={
-        semifinal1:{label:"SEMIFINAL 1",status:"ready",playerAUid:people[0].uid,playerAName:people[0].username,playerBUid:people[3].uid,playerBName:people[3].username},
-        semifinal2:{label:"SEMIFINAL 2",status:"ready",playerAUid:people[1].uid,playerAName:people[1].username,playerBUid:people[2].uid,playerBName:people[2].username},
+        semifinal1:{label:"SEMIFINAL 1",status:"ready",playerAUid:ordered[0].uid,playerAName:ordered[0].username,playerBUid:ordered[3].uid,playerBName:ordered[3].username},
+        semifinal2:{label:"SEMIFINAL 2",status:"ready",playerAUid:ordered[1].uid,playerAName:ordered[1].username,playerBUid:ordered[2].uid,playerBName:ordered[2].username},
         final:{label:"FINAL",status:"pending"}
       };
-    }
-    return t;
-  });
-  if(!tx.committed) throw new HttpsError("failed-precondition","El torneo ya comenzó o está completo.");
-  return {ok:true};
+      return t;
+    });
+  }
+
+  return {ok:true,participants:people.length};
 });
 
 exports.openTournamentMatch=onCall(async request=>{
