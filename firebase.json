@@ -6,6 +6,7 @@
     "source": "functions"
   },
   "hosting": {
+    "target": "mercado5",
     "public": ".",
     "ignore": [
       "firebase.json",
