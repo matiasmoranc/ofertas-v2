@@ -1,5 +1,14 @@
 {
   "projects": {
     "default": "ofertas-v2"
+  },
+  "targets": {
+    "ofertas-v2": {
+      "hosting": {
+        "mercado5": [
+          "mercado5"
+        ]
+      }
+    }
   }
 }
