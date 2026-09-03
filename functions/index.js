@@ -75,16 +75,12 @@ exports.deleteTournament=onCall(async request=>{
   if(!initial) throw new HttpsError("not-found","El torneo ya no existe.");
   if(initial.ownerUid!==uid) throw new HttpsError("permission-denied","Solo el creador puede eliminar este torneo.");
 
-  let deletedTournament=initial;
-  const removed=await target.transaction(tournament=>{
-    if(!tournament || tournament.ownerUid!==uid) return;
-    deletedTournament=tournament;
-    return null;
-  });
-  if(!removed.committed) throw new HttpsError("failed-precondition","No se pudo eliminar el torneo.");
+  // El propietario ya fue validado contra el estado actual del torneo.
+  // remove() evita que una eliminación válida quede marcada como transacción abortada.
+  await target.remove();
 
   const cleanup={};
-  Object.values(deletedTournament.matches||{}).forEach(match=>{
+  Object.values(initial.matches||{}).forEach(match=>{
     const code=cleanText(match?.roomCode,12);
     if(!code) return;
     cleanup[`games/${code}`]=null;
