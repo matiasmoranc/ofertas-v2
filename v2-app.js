@@ -246,6 +246,7 @@ export async function startV2App(config,handlers={}){
   callbacks=handlers; injectUI();
   if(!configured(config)){bindUI();showGate("login");setMessage("Falta configurar el nuevo proyecto Firebase en firebase-config.js.",true);return;}
   const app=initializeApp(config); auth=getAuth(app); db=getDatabase(app); functions=getFunctions(app);
+  auth.languageCode="es";
   await setPersistence(auth,browserLocalPersistence);
   bindUI();
   const remembered=localStorage.getItem("ofertasV2LastLogin");
