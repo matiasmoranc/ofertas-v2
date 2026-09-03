@@ -65,6 +65,35 @@ exports.createTournament=onCall(async request=>{
   return {tournamentId:tournamentRef.key};
 });
 
+exports.deleteTournament=onCall(async request=>{
+  const uid=requireAuth(request);
+  const tournamentId=cleanText(request.data?.tournamentId,80);
+  if(!tournamentId) throw new HttpsError("invalid-argument","Falta el torneo.");
+
+  const target=db.ref(`tournaments/${tournamentId}`);
+  const initial=(await target.get()).val();
+  if(!initial) throw new HttpsError("not-found","El torneo ya no existe.");
+  if(initial.ownerUid!==uid) throw new HttpsError("permission-denied","Solo el creador puede eliminar este torneo.");
+
+  let deletedTournament=initial;
+  const removed=await target.transaction(tournament=>{
+    if(!tournament || tournament.ownerUid!==uid) return;
+    deletedTournament=tournament;
+    return null;
+  });
+  if(!removed.committed) throw new HttpsError("failed-precondition","No se pudo eliminar el torneo.");
+
+  const cleanup={};
+  Object.values(deletedTournament.matches||{}).forEach(match=>{
+    const code=cleanText(match?.roomCode,12);
+    if(!code) return;
+    cleanup[`games/${code}`]=null;
+    cleanup[`matches/${code}`]=null;
+  });
+  if(Object.keys(cleanup).length) await db.ref().update(cleanup);
+  return {ok:true};
+});
+
 exports.joinTournament=onCall(async request=>{
   const uid=requireAuth(request);
   const tournamentId=cleanText(request.data?.tournamentId,80);
