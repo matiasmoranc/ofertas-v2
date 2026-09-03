@@ -147,16 +147,57 @@ function renderTournaments(data={}){
   const list=Object.entries(data).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
   node.innerHTML=`<div class="tournament-create"><input id="tournamentName" class="auth-input" maxlength="28" placeholder="Nombre del torneo"><button id="createTournamentButton" class="small-action green">CREAR</button></div><div id="tournamentMessage" class="auth-message"></div><div class="tournament-list">${list.length?list.map(([id,t])=>tournamentCard(id,t)).join(""):'<div class="empty-state">No hay torneos todavía. Creá el primero.</div>'}</div>`;
 }
+function bracketPlayer(name,fallback="Por definir"){
+  return `<span class="bracket-player">${esc(name||fallback)}</span>`;
+}
+function bracketMatch(tournamentId,matchId,match){
+  const m=match||{};
+  const mine=m.playerAUid===auth.currentUser?.uid||m.playerBUid===auth.currentUser?.uid;
+  const canOpen=mine && ["ready","playing"].includes(m.status) && !m.winnerUid;
+  const hasScore=m.score && Number.isFinite(Number(m.score.A)) && Number.isFinite(Number(m.score.B));
+  const status=m.winnerUid?"FINALIZADO":m.status==="playing"?"EN JUEGO":m.status==="ready"?"LISTO":"POR DEFINIR";
+  return `<div class="elimination-match ${m.winnerUid?"completed":""}">
+    <div class="elimination-status">${status}</div>
+    <div class="bracket-player-row ${m.winnerUid===m.playerAUid?"winner":""}">${bracketPlayer(m.playerAName)}<strong>${hasScore?m.score.A:"–"}</strong></div>
+    <div class="bracket-player-row ${m.winnerUid===m.playerBUid?"winner":""}">${bracketPlayer(m.playerBName)}<strong>${hasScore?m.score.B:"–"}</strong></div>
+    ${canOpen?`<button class="small-action bracket-play" data-open-tournament="${esc(tournamentId)}" data-match="${esc(matchId)}">JUGAR</button>`:""}
+  </div>`;
+}
+function tournamentBracket(id,t){
+  const matches=t.matches||{};
+  return `<div class="fixture-title">CUADRO DE ELIMINACIÓN</div>
+    <div class="elimination-bracket">
+      <div class="bracket-round semifinal-round">
+        <div class="round-label">SEMIFINALES</div>
+        ${bracketMatch(id,"semifinal1",matches.semifinal1)}
+        ${bracketMatch(id,"semifinal2",matches.semifinal2)}
+      </div>
+      <div class="bracket-path" aria-hidden="true"><i class="path-top"></i><i class="path-bottom"></i><i class="path-middle"></i></div>
+      <div class="bracket-round final-round">
+        <div class="trophy-wrap"><span class="rotating-trophy">🏆</span></div>
+        <div class="round-label">FINAL</div>
+        ${bracketMatch(id,"final",matches.final)}
+      </div>
+    </div>`;
+}
 function tournamentCard(id,t){
   const participants=Object.values(t.participants||{}), joined=participants.some(p=>p.uid===auth.currentUser?.uid);
   const status={waiting:"ESPERANDO",semifinals:"SEMIFINALES",final:"FINAL",completed:"FINALIZADO"}[t.status]||"TORNEO";
-  const matches=Object.entries(t.matches||{}).map(([mid,m])=>{
-    const mine=m.playerAUid===auth.currentUser?.uid||m.playerBUid===auth.currentUser?.uid;
-    const canOpen=mine && ["ready","playing"].includes(m.status) && !m.winnerUid;
-    return `<div class="bracket-match"><div class="tournament-row"><span><strong>${esc(m.label||mid)}</strong><br>${esc(m.playerAName||"Por definir")} vs ${esc(m.playerBName||"Por definir")}</span>${canOpen?`<button class="small-action" data-open-tournament="${esc(id)}" data-match="${esc(mid)}">JUGAR</button>`:""}</div></div>`;
-  }).join("");
-  return `<div class="tournament-item"><div class="tournament-row"><div><strong>${esc(t.name||"Torneo")}</strong><div class="item-meta">${status} · ${participants.length}/4 jugadores</div></div>${t.status==="waiting"&&!joined?`<button class="small-action" data-join-tournament="${esc(id)}">UNIRME</button>`:""}</div><div class="bracket">${matches}</div>${t.winnerName?`<div class="item-meta outcome-win">🏆 Campeón: ${esc(t.winnerName)}</div>`:""}</div>`;
+  const waitingSlots=t.status==="waiting"?`<div class="waiting-slots">${[0,1,2,3].map((_,index)=>{
+    const player=participants[index];
+    return `<div class="waiting-slot ${player?"filled":""}"><span>${index+1}</span>${esc(player?.username||"Lugar disponible")}</div>`;
+  }).join("")}</div>`:"";
+  return `<div class="tournament-item tournament-fixture">
+    <div class="tournament-row">
+      <div><strong class="tournament-name">${esc(t.name||"Torneo")}</strong><div class="item-meta">${status} · ${participants.length}/4 jugadores</div></div>
+      ${t.status==="waiting"&&!joined?`<button class="small-action" data-join-tournament="${esc(id)}">UNIRME</button>`:""}
+    </div>
+    ${waitingSlots}
+    ${t.matches?tournamentBracket(id,t):""}
+    ${t.winnerName?`<div class="champion-banner"><span class="rotating-trophy">🏆</span><div><small>CAMPEÓN</small><strong>${esc(t.winnerName)}</strong></div></div>`:""}
+  </div>`;
 }
+
 function startUserData(uid){
   if(stopUser) stopUser();
   stopUser=onValue(ref(db,`users/${uid}`),snap=>renderProfile(snap.val()||{}));
