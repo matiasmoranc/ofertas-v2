@@ -17,6 +17,7 @@ const readyExpiryTimers=new Map();
 const readyExpiryRequests=new Set();
 const tournamentExpansionOverrides=new Map();
 let adminSnapshotData=null;
+let adminActiveView="users";
 
 async function openTournamentRoomOnce(code){
   if(!code) return;
@@ -355,35 +356,51 @@ function renderAdminPanel(data){
   adminSnapshotData=data;
   const node=el("adminPanelContent"); if(!node) return;
   const users=data?.users||[], tournaments=data?.tournaments||[];
+  const usersActive=adminActiveView==="users";
   node.innerHTML=`
-    <div class="admin-toolbar">
-      <input id="adminUserSearch" class="auth-input" placeholder="Buscar usuario">
-      <button class="small-action" data-admin-refresh>ACTUALIZAR</button>
+    <div class="admin-main-tabs">
+      <button class="small-action ${usersActive?"green":""}" data-admin-view="users">USUARIOS</button>
+      <button class="small-action ${!usersActive?"green":""}" data-admin-view="cups">COPAS</button>
+      <button class="small-action admin-refresh" data-admin-refresh aria-label="Actualizar" title="Actualizar">↻</button>
     </div>
     <div id="adminMessage" class="auth-message"></div>
-    <h3 class="admin-section-title">USUARIOS (${users.length})</h3>
-    <div class="admin-user-list">${users.map(user=>`
-      <article class="admin-card" data-admin-user-card data-search="${esc(user.username.toLowerCase())}">
-        <div class="admin-card-head"><strong>${esc(user.username)}</strong><span>🏆 ${user.stats.tournamentsWon}</span></div>
-        <div class="admin-record">${user.stats.played} PJ · ${user.stats.won} G · ${user.stats.drawn} E · ${user.stats.lost} P</div>
-        <div class="admin-actions">
-          <button class="small-action" data-admin-cups="-1" data-uid="${esc(user.uid)}" data-current="${user.stats.tournamentsWon}">− COPA</button>
-          <button class="small-action green" data-admin-cups="1" data-uid="${esc(user.uid)}" data-current="${user.stats.tournamentsWon}">+ COPA</button>
-          <button class="small-action" data-admin-reset-stats="${esc(user.uid)}">REINICIAR ESTADÍSTICAS</button>
-          ${user.username.toLowerCase()!=="pinar93"?`<button class="small-action danger" data-admin-delete-user="${esc(user.uid)}" data-name="${esc(user.username)}">ELIMINAR USUARIO</button>`:""}
-        </div>
-      </article>`).join("")||'<div class="empty-state">No hay usuarios.</div>'}</div>
-    <h3 class="admin-section-title">TORNEOS (${tournaments.length})</h3>
-    <div class="admin-tournament-list">${tournaments.map(tournament=>`
-      <article class="admin-card">
-        <div class="admin-card-head"><strong>${esc(tournament.name)}</strong><span>${esc(tournament.status)} · ${tournament.participants}/4</span></div>
-        <div class="admin-match-list">${tournament.matches.map(match=>`
-          <div class="admin-match-row">
-            <span>${esc(match.label)}: ${esc(match.playerAName)} vs ${esc(match.playerBName)} · ${esc(match.status)}</span>
-            ${!match.winnerUid&&["ready","playing"].includes(match.status)?`<button class="small-action" data-admin-reset-match data-tournament="${esc(tournament.id)}" data-match="${esc(match.matchId)}">REINICIAR</button>`:""}
-          </div>`).join("")}</div>
-        <button class="small-action danger" data-admin-delete-tournament="${esc(tournament.id)}" data-name="${esc(tournament.name)}">ELIMINAR TORNEO</button>
-      </article>`).join("")||'<div class="empty-state">No hay torneos.</div>'}</div>`;
+    <section data-admin-section="users" class="${usersActive?"":"screen-hidden"}">
+      <div class="admin-toolbar"><input id="adminUserSearch" class="auth-input" placeholder="Buscar usuario"></div>
+      <div class="admin-user-list">${users.map(user=>`
+        <details class="admin-card admin-collapsible" data-admin-user-card data-search="${esc(user.username.toLowerCase())}">
+          <summary class="admin-card-head"><strong>${esc(user.username)}</strong><span>🏆 ${user.stats.tournamentsWon}<i aria-hidden="true"></i></span></summary>
+          <div class="admin-card-body">
+            <div class="admin-record">${user.stats.played} PJ · ${user.stats.won} G · ${user.stats.drawn} E · ${user.stats.lost} P</div>
+            <div class="admin-actions">
+              <button class="small-action" data-admin-cups="-1" data-uid="${esc(user.uid)}" data-current="${user.stats.tournamentsWon}">− COPA</button>
+              <button class="small-action green" data-admin-cups="1" data-uid="${esc(user.uid)}" data-current="${user.stats.tournamentsWon}">+ COPA</button>
+              <button class="small-action" data-admin-reset-stats="${esc(user.uid)}">REINICIAR ESTADÍSTICAS</button>
+              ${user.username.toLowerCase()!=="pinar93"?`<button class="small-action danger" data-admin-delete-user="${esc(user.uid)}" data-name="${esc(user.username)}">ELIMINAR USUARIO</button>`:""}
+            </div>
+          </div>
+        </details>`).join("")||'<div class="empty-state">No hay usuarios.</div>'}</div>
+    </section>
+    <section data-admin-section="cups" class="${!usersActive?"":"screen-hidden"}">
+      <div class="admin-tournament-list">${tournaments.map(tournament=>`
+        <details class="admin-card admin-collapsible">
+          <summary class="admin-card-head"><strong>${esc(tournament.name)}</strong><span>${esc(tournament.status)} · ${tournament.participants.length}/4 <i aria-hidden="true"></i></span></summary>
+          <div class="admin-card-body">
+            <h4 class="admin-inner-title">PARTICIPANTES</h4>
+            <div class="admin-participant-list">${tournament.participants.map(player=>`
+              <div class="admin-participant-row">
+                <span>${esc(player.username)}</span>
+                ${tournament.status==="waiting"?`<button class="small-action danger" data-admin-remove-participant data-tournament="${esc(tournament.id)}" data-uid="${esc(player.uid)}" data-name="${esc(player.username)}" data-cup-name="${esc(tournament.name)}">QUITAR</button>`:""}
+              </div>`).join("")||'<div class="admin-record">Sin participantes.</div>'}</div>
+            <h4 class="admin-inner-title">PARTIDOS</h4>
+            <div class="admin-match-list">${tournament.matches.map(match=>`
+              <div class="admin-match-row">
+                <span>${esc(match.label)}: ${esc(match.playerAName)} vs ${esc(match.playerBName)} · ${esc(match.status)}</span>
+                ${!match.winnerUid&&["ready","playing"].includes(match.status)?`<button class="small-action" data-admin-reset-match data-tournament="${esc(tournament.id)}" data-match="${esc(match.matchId)}">REINICIAR</button>`:""}
+              </div>`).join("")||'<div class="admin-record">Todavía no hay partidos.</div>'}</div>
+            <button class="small-action danger" data-admin-delete-tournament="${esc(tournament.id)}" data-name="${esc(tournament.name)}">ELIMINAR COPA</button>
+          </div>
+        </details>`).join("")||'<div class="empty-state">No hay copas.</div>'}</div>
+    </section>`;
 }
 async function loadAdminPanel(){
   const node=el("adminPanelContent"); if(!node || profile?.usernameKey!=="pinar93") return;
@@ -392,13 +409,21 @@ async function loadAdminPanel(){
   catch(error){node.innerHTML=`<div class="auth-message error">${esc(error?.message||"No se pudo cargar el panel.")}</div>`;}
 }
 async function handleAdminClick(event){
+  const view=event.target.closest("[data-admin-view]");
   const refresh=event.target.closest("[data-admin-refresh]");
   const cups=event.target.closest("[data-admin-cups]");
   const resetStats=event.target.closest("[data-admin-reset-stats]");
   const deleteUser=event.target.closest("[data-admin-delete-user]");
   const deleteTournament=event.target.closest("[data-admin-delete-tournament]");
   const resetMatch=event.target.closest("[data-admin-reset-match]");
-  if(!refresh&&!cups&&!resetStats&&!deleteUser&&!deleteTournament&&!resetMatch) return;
+  const removeParticipant=event.target.closest("[data-admin-remove-participant]");
+  if(view){
+    adminActiveView=view.dataset.adminView;
+    document.querySelectorAll("[data-admin-section]").forEach(section=>section.classList.toggle("screen-hidden",section.dataset.adminSection!==adminActiveView));
+    document.querySelectorAll("[data-admin-view]").forEach(button=>button.classList.toggle("green",button.dataset.adminView===adminActiveView));
+    return;
+  }
+  if(!refresh&&!cups&&!resetStats&&!deleteUser&&!deleteTournament&&!resetMatch&&!removeParticipant) return;
   const message=el("adminMessage");
   try{
     if(refresh) return loadAdminPanel();
@@ -414,15 +439,18 @@ async function handleAdminClick(event){
       if(!confirm(`¿Eliminar definitivamente al usuario “${deleteUser.dataset.name}”? Esta acción no se puede deshacer.`)) return;
       await adminRequest("adminDeleteUser",{targetUid:deleteUser.dataset.adminDeleteUser});
     }
+    if(removeParticipant){
+      if(!confirm(`¿Quitar a “${removeParticipant.dataset.name}” de la copa “${removeParticipant.dataset.cupName}”?`)) return;
+      await adminRequest("adminRemoveParticipant",{tournamentId:removeParticipant.dataset.tournament,targetUid:removeParticipant.dataset.uid});
+    }
     if(deleteTournament){
-      if(!confirm(`¿Eliminar definitivamente el torneo “${deleteTournament.dataset.name}”?`)) return;
+      if(!confirm(`¿Eliminar definitivamente la copa “${deleteTournament.dataset.name}”?`)) return;
       await adminRequest("adminDeleteTournament",{tournamentId:deleteTournament.dataset.adminDeleteTournament});
     }
     if(resetMatch){
       if(!confirm("¿Reiniciar este partido? Volverá a quedar pendiente y se eliminará la sala actual.")) return;
       await adminRequest("adminResetMatch",{tournamentId:resetMatch.dataset.tournament,matchId:resetMatch.dataset.match});
     }
-    if(message) message.textContent="Cambio guardado.";
     await loadAdminPanel();
   }catch(error){
     if(message){message.textContent=error?.message||"No se pudo completar la acción.";message.className="auth-message error";}
