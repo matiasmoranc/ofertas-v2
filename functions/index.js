@@ -1,7 +1,7 @@
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onValueCreated} = require("firebase-functions/v2/database");
 const {initializeApp} = require("firebase-admin/app");
-const {getDatabase} = require("firebase-admin/database");
+const {getDatabase, ServerValue} = require("firebase-admin/database");
 
 initializeApp();
 const db=getDatabase();
@@ -334,21 +334,30 @@ function validOfficialResult(game,result){
   return result.winner===expected;
 }
 async function applyUserResult(uid,room,entry,outcome,goalsFor,goalsAgainst){
-  await db.ref(`users/${uid}`).transaction(user=>{
-    if(!user) return;
-    user.appliedMatches=user.appliedMatches||{};
-    const alreadyApplied=Boolean(user.appliedMatches[room]);
-    user.stats={played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,...(user.stats||{})};
-    if(!alreadyApplied){
-      user.appliedMatches[room]=true;
-      user.stats.played++; user.stats.goalsFor+=goalsFor; user.stats.goalsAgainst+=goalsAgainst;
-      if(outcome==="win")user.stats.won++; else if(outcome==="loss")user.stats.lost++; else user.stats.drawn++;
-    }
-    // Reponer la ficha si una ejecución anterior alcanzó las estadísticas
-    // pero se interrumpió antes de guardar el historial.
-    user.history=user.history||{}; user.history[room]=entry;
-    return user;
-  });
+  const userRef=db.ref(`users/${uid}`);
+  const userSnap=await userRef.get();
+  if(!userSnap.exists()) throw new Error(`No existe el usuario ${uid}`);
+
+  // El historial se escribe siempre de forma directa para poder reparar
+  // una ficha faltante aunque las estadísticas ya estuvieran aplicadas.
+  await userRef.child(`history/${room}`).set(entry);
+
+  // La marca por partido se reclama atómicamente. Solo quien la crea suma
+  // estadísticas; trigger y sincronización pueden ejecutarse juntos sin duplicar.
+  const claim=await userRef.child(`appliedMatches/${room}`).transaction(
+    current=>current===true?undefined:true
+  );
+  if(!claim.committed) return;
+
+  const updates={
+    "stats/played":ServerValue.increment(1),
+    "stats/goalsFor":ServerValue.increment(goalsFor),
+    "stats/goalsAgainst":ServerValue.increment(goalsAgainst)
+  };
+  if(outcome==="win") updates["stats/won"]=ServerValue.increment(1);
+  else if(outcome==="loss") updates["stats/lost"]=ServerValue.increment(1);
+  else updates["stats/drawn"]=ServerValue.increment(1);
+  await userRef.update(updates);
 }
 async function advanceTournament(game,result,winnerUid,winnerName){
   if(!game.tournamentId || !game.tournamentMatchId) return;
