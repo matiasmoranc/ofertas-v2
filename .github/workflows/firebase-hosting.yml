@@ -34,8 +34,5 @@ jobs:
       - name: Instalar dependencias de funciones
         run: npm install --prefix functions
 
-      - name: Limpiar función incompleta anterior
-        run: npx --yes firebase-tools@latest functions:delete forfeitTournamentMatch --region us-central1 --project ofertas-v2 --force
-
       - name: Publicar Hosting, reglas y funciones
         run: npx --yes firebase-tools@latest deploy --only hosting,database,functions --project ofertas-v2 --non-interactive
