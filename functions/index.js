@@ -332,6 +332,34 @@ exports.openTournamentMatch=onCall(async request=>{
   }
 
 
+  if(request.data?.action==="sendEmoji"){
+    const code=cleanText(request.data?.roomCode,12);
+    const emoji=String(request.data?.emoji||"");
+    const allowed=["😂","👏","🤬","💩","🤝"];
+    if(!code || !allowed.includes(emoji)){
+      throw new HttpsError("invalid-argument","Emoji no válido.");
+    }
+    const gameRef=db.ref(`games/${code}`);
+    const game=(await gameRef.get()).val();
+    if(!game || game.status!=="playing" || game.result){
+      throw new HttpsError("failed-precondition","El partido ya no está en juego.");
+    }
+    if(![game.playerAUid,game.playerBUid].includes(uid)){
+      throw new HttpsError("permission-denied","Solo los jugadores pueden enviar emojis.");
+    }
+    const now=Date.now();
+    const lastSent=Number(game.emojiLastSent?.[uid]||0);
+    if(now-lastSent<3000){
+      throw new HttpsError("resource-exhausted","Esperá 3 segundos antes de enviar otro emoji.");
+    }
+    const senderName=uid===game.playerAUid?(game.playerAName||"Equipo Azul"):(game.playerBName||"Equipo Rojo");
+    await gameRef.update({
+      [`emojiLastSent/${uid}`]:now,
+      emojiEvent:{id:`${now}-${uid.slice(0,8)}`,emoji,senderUid:uid,senderName,sentAt:now}
+    });
+    return {ok:true,sentAt:now};
+  }
+
   if(request.data?.action==="leaveTournament"){
     const tournamentId=cleanText(request.data?.tournamentId,80);
     if(!tournamentId) throw new HttpsError("invalid-argument","Falta el torneo.");
