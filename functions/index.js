@@ -402,6 +402,64 @@ exports.openTournamentMatch=onCall(async request=>{
     return {ok:true,processed};
   }
 
+  if(request.data?.action==="claimDisconnectWin"){
+    const code=cleanText(request.data?.roomCode,12);
+    if(!code) throw new HttpsError("invalid-argument","Falta la sala.");
+    const gameRef=db.ref(`games/${code}`);
+    const initial=(await gameRef.get()).val();
+    if(!initial) throw new HttpsError("not-found","La partida ya no existe.");
+    if(![initial.playerAUid,initial.playerBUid].includes(uid)){
+      throw new HttpsError("permission-denied","No participás de esta partida.");
+    }
+    if(initial.result){
+      await processOfficialGame(code,initial,initial.result);
+      return {ok:true,alreadyFinished:true};
+    }
+    if(initial.status!=="playing"){
+      throw new HttpsError("failed-precondition","El partido todavía no comenzó.");
+    }
+    const opponentUid=initial.playerAUid===uid?initial.playerBUid:initial.playerAUid;
+    const [myPresenceSnap,opponentPresenceSnap]=await Promise.all([
+      gameRef.child(`playerPresence/${uid}`).get(),
+      gameRef.child(`playerPresence/${opponentUid}`).get()
+    ]);
+    const myPresence=myPresenceSnap.val();
+    const opponentPresence=opponentPresenceSnap.val();
+    const disconnectedAt=Number(opponentPresence?.disconnectedAt||0);
+    if(myPresence?.online!==true){
+      throw new HttpsError("failed-precondition","Debés estar conectado para reclamar el partido.");
+    }
+    if(opponentPresence?.online!==false || !disconnectedAt){
+      throw new HttpsError("failed-precondition","Tu rival volvió a conectarse.");
+    }
+    if(Date.now()-disconnectedAt<120000){
+      throw new HttpsError("failed-precondition","Todavía no terminaron los 2 minutos de espera.");
+    }
+    const forfeited=await gameRef.transaction(current=>{
+      if(!current || current.result || current.status!=="playing") return;
+      const currentOpponent=current.playerAUid===uid?current.playerBUid:current.playerAUid;
+      const presence=current.playerPresence?.[currentOpponent];
+      if(presence?.online!==false || Number(presence?.disconnectedAt||0)!==disconnectedAt) return;
+      const winner=current.playerAUid===uid?"A":"B";
+      current.status="finished";
+      current.message="⌛ El rival no volvió en 2 minutos. Victoria 3–0.";
+      current.result={
+        goalsA:winner==="A"?3:0,
+        goalsB:winner==="B"?3:0,
+        winner,
+        forfeit:true,
+        forfeitedBy:currentOpponent,
+        disconnected:true,
+        fromMiniMatch:false
+      };
+      return current;
+    });
+    const finalGame=forfeited.snapshot.val();
+    if(finalGame?.result) await processOfficialGame(code,finalGame,finalGame.result);
+    await db.ref(`openRooms/${code}`).remove();
+    return {ok:true,alreadyFinished:!forfeited.committed};
+  }
+
   if(request.data?.action==="forfeitOpenMatch"){
     const code=cleanText(request.data?.roomCode,12);
     if(!code) throw new HttpsError("invalid-argument","Falta la sala.");
