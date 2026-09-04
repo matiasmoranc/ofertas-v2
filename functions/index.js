@@ -2,6 +2,7 @@ const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {onValueCreated} = require("firebase-functions/v2/database");
 const {initializeApp} = require("firebase-admin/app");
 const {getDatabase, ServerValue} = require("firebase-admin/database");
+const {getAuth} = require("firebase-admin/auth");
 
 initializeApp();
 const db=getDatabase();
@@ -28,6 +29,12 @@ async function profileFor(uid){
 function requireAuth(request){
   if(!request.auth) throw new HttpsError("unauthenticated","Tenés que iniciar sesión.");
   return request.auth.uid;
+}
+async function requireAdmin(uid){
+  const adminUid=(await db.ref("usernames/pinar93").get()).val();
+  if(!adminUid || adminUid!==uid){
+    throw new HttpsError("permission-denied","Solo pinar93 puede usar el panel de administración.");
+  }
 }
 function baseTournamentGame(code,a,b,tournamentId,matchId){
   return {
@@ -179,6 +186,127 @@ exports.joinTournament=onCall(async request=>{
 
 exports.openTournamentMatch=onCall(async request=>{
   const uid=requireAuth(request);
+
+
+  if(String(request.data?.action||"").startsWith("admin")){
+    await requireAdmin(uid);
+    const action=request.data.action;
+
+    if(action==="adminSnapshot"){
+      const [usersSnap,tournamentsSnap]=await Promise.all([
+        db.ref("users").get(),db.ref("tournaments").get()
+      ]);
+      const users=Object.entries(usersSnap.val()||{}).map(([userUid,user])=>({
+        uid:userUid,
+        username:cleanText(user?.profile?.username||"Sin usuario",40),
+        stats:{
+          played:Number(user?.stats?.played||0),
+          won:Number(user?.stats?.won||0),
+          drawn:Number(user?.stats?.drawn||0),
+          lost:Number(user?.stats?.lost||0),
+          tournamentsWon:Number(user?.stats?.tournamentsWon||0)
+        }
+      })).sort((a,b)=>a.username.localeCompare(b.username));
+      const tournaments=Object.entries(tournamentsSnap.val()||{}).map(([id,tournament])=>({
+        id,name:cleanText(tournament?.name||"Torneo",50),status:tournament?.status||"waiting",
+        participants:Object.keys(tournament?.participants||{}).length,
+        matches:Object.entries(tournament?.matches||{}).map(([matchId,match])=>({
+          matchId,status:match?.status||"pending",
+          label:cleanText(match?.label||matchId,40),
+          playerAName:cleanText(match?.playerAName||"Por definir",40),
+          playerBName:cleanText(match?.playerBName||"Por definir",40),
+          winnerUid:match?.winnerUid||null,
+          roomCode:match?.roomCode||null
+        }))
+      })).sort((a,b)=>a.name.localeCompare(b.name));
+      return {users,tournaments};
+    }
+
+    if(action==="adminSetCups"){
+      const targetUid=cleanText(request.data?.targetUid,128);
+      const cups=Number(request.data?.cups);
+      if(!targetUid || !Number.isInteger(cups) || cups<0 || cups>999){
+        throw new HttpsError("invalid-argument","La cantidad de copas no es válida.");
+      }
+      const target=db.ref(`users/${targetUid}`);
+      if(!(await target.get()).exists()) throw new HttpsError("not-found","El usuario no existe.");
+      await target.child("stats/tournamentsWon").set(cups);
+      return {ok:true};
+    }
+
+    if(action==="adminResetStats"){
+      const targetUid=cleanText(request.data?.targetUid,128);
+      const target=db.ref(`users/${targetUid}`);
+      const current=(await target.get()).val();
+      if(!current) throw new HttpsError("not-found","El usuario no existe.");
+      const cups=Number(current?.stats?.tournamentsWon||0);
+      await target.child("stats").set({
+        played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,tournamentsWon:cups
+      });
+      await Promise.all([
+        target.child("history").remove(),
+        target.child("appliedMatches").remove()
+      ]);
+      return {ok:true};
+    }
+
+    if(action==="adminDeleteUser"){
+      const targetUid=cleanText(request.data?.targetUid,128);
+      if(!targetUid || targetUid===uid) throw new HttpsError("failed-precondition","No podés eliminar la cuenta administradora.");
+      const userRef=db.ref(`users/${targetUid}`);
+      const user=(await userRef.get()).val();
+      if(!user) throw new HttpsError("not-found","El usuario no existe.");
+      const tournaments=(await db.ref("tournaments").get()).val()||{};
+      const active=Object.values(tournaments).some(t=>t?.status!=="completed" && t?.participants?.[targetUid]);
+      if(active) throw new HttpsError("failed-precondition","El usuario participa en un torneo activo. Terminá o eliminá ese torneo primero.");
+      const usernameKey=user?.profile?.usernameKey;
+      const games=(await db.ref("games").get()).val()||{};
+      const cleanup={};
+      for(const [code,game] of Object.entries(games)){
+        if(!game?.result && [game?.playerAUid,game?.playerBUid].includes(targetUid)){
+          cleanup[`games/${code}`]=null;
+          cleanup[`openRooms/${code}`]=null;
+        }
+      }
+      cleanup[`users/${targetUid}`]=null;
+      if(usernameKey) cleanup[`usernames/${usernameKey}`]=null;
+      await db.ref().update(cleanup);
+      try{ await getAuth().deleteUser(targetUid); }
+      catch(error){ if(error?.code!=="auth/user-not-found") throw error; }
+      return {ok:true};
+    }
+
+    if(action==="adminDeleteTournament"){
+      const tournamentId=cleanText(request.data?.tournamentId,80);
+      const tournamentRef=db.ref(`tournaments/${tournamentId}`);
+      const tournament=(await tournamentRef.get()).val();
+      if(!tournament) throw new HttpsError("not-found","El torneo no existe.");
+      const cleanup={[`tournaments/${tournamentId}`]:null};
+      const nameKey=tournament.nameKey||tournamentNameKey(tournament.name);
+      if(nameKey) cleanup[`tournamentNames/${nameKey}`]=null;
+      for(const match of Object.values(tournament.matches||{})){
+        const code=cleanText(match?.roomCode,12);
+        if(code){cleanup[`games/${code}`]=null;cleanup[`matches/${code}`]=null;}
+      }
+      await db.ref().update(cleanup);
+      return {ok:true};
+    }
+
+    if(action==="adminResetMatch"){
+      const tournamentId=cleanText(request.data?.tournamentId,80);
+      const matchId=cleanText(request.data?.matchId,30);
+      const matchRef=db.ref(`tournaments/${tournamentId}/matches/${matchId}`);
+      const match=(await matchRef.get()).val();
+      if(!match) throw new HttpsError("not-found","El partido no existe.");
+      if(match.winnerUid) throw new HttpsError("failed-precondition","El partido ya tiene ganador y no puede reiniciarse desde este panel.");
+      const code=cleanText(match.roomCode,12);
+      await matchRef.update({status:"ready",roomCode:null,readyPlayers:null,startedAt:null});
+      if(code) await db.ref().update({[`games/${code}`]:null,[`matches/${code}`]:null,[`openRooms/${code}`]:null});
+      return {ok:true};
+    }
+
+    throw new HttpsError("invalid-argument","Acción administrativa desconocida.");
+  }
 
 
   if(request.data?.action==="leaveTournament"){
