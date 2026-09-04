@@ -255,16 +255,20 @@ exports.openTournamentMatch=onCall(async request=>{
   }
 
   const playerProfile=await profileFor(uid);
-  await matchRef.child(`readyPlayers/${uid}`).set({
-    uid,username:playerProfile.username,readyAt:Date.now()
-  });
-
   const proposedCode=roomCode();
+
+  // Marcar al jugador como pronto y decidir el inicio dentro de una única
+  // transacción. Así dos clics simultáneos no pueden dejar ambos listos
+  // sin crear la sala.
   const locked=await matchRef.transaction(current=>{
     if(!current || current.winnerUid || !["ready","playing"].includes(current.status)) return;
+    current.readyPlayers=current.readyPlayers||{};
+    current.readyPlayers[uid]={
+      uid,username:playerProfile.username,readyAt:Date.now()
+    };
     const bothReady=Boolean(
-      current.readyPlayers?.[current.playerAUid] &&
-      current.readyPlayers?.[current.playerBUid]
+      current.readyPlayers[current.playerAUid] &&
+      current.readyPlayers[current.playerBUid]
     );
     if(!bothReady){
       current.status="ready";
