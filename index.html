@@ -2200,7 +2200,7 @@ position: fixed;
 
 <script type="module">
 import { firebaseConfig } from "./firebase-config.js";
-import { startV2App, getV2Profile, forfeitTournamentMatch, syncOfficialGameResult, readyTournamentRematch, postponeTournamentRematch } from "./v2-app.js?v=20260904-16";
+import { startV2App, getV2Profile, forfeitTournamentMatch, markTournamentMatchEntered, syncOfficialGameResult, readyTournamentRematch, postponeTournamentRematch } from "./v2-app.js?v=20260904-17";
 import { getDatabase, ref, get, update, onValue, runTransaction, remove, set, onDisconnect } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
 
 /* =================================================
@@ -4241,6 +4241,8 @@ async function enterTournamentRoom(code){
     throw new Error("No pertenecés a este partido del torneo.");
   }
 
+  await markTournamentMatchEntered(state.tournamentId,state.tournamentMatchId,code);
+
   /* Las transacciones del cliente pueden comenzar con un estado local vacío
      y abortarse. Inicializamos desde una lectura confirmada, igual que al
      entrar en una sala normal. */
@@ -4743,15 +4745,24 @@ $("leaveRoomButton").addEventListener("click",async()=>{
   const tournamentId=gameState?.tournamentId;
   const tournamentMatchId=gameState?.tournamentMatchId;
   if(tournamentId && tournamentMatchId && gameState?.status==="playing" && !gameState?.result && !isSpectator){
-    if(!confirm("¿Salir del partido?\n\nSi salís ahora, tu rival ganará 3–0.")) return;
+    const opponentUid=gameState.playerAUid===uid?gameState.playerBUid:gameState.playerAUid;
+    const opponentEntered=Boolean(gameState.enteredPlayers?.[opponentUid]);
+    const warning=opponentEntered
+      ?"Si salís ahora, tu rival ganará 3–0."
+      :"Tu rival todavía no entró. El partido seguirá pendiente.";
+    if(!confirm(`¿Salir del partido?\n\n${warning}`)) return;
     const button=$("leaveRoomButton");
     button.disabled=true;
-    button.textContent="Registrando abandono...";
+    button.textContent=opponentEntered?"Registrando abandono...":"Saliendo...";
     try{
       await forfeitTournamentMatch(tournamentId,tournamentMatchId);
       leaveRoom(true,false);
     }catch(error){
-      console.error("No se pudo registrar el abandono:",error);
+      console.error("No se pudo registrar la salida:",error);
+      if(["functions/failed-precondition","functions/not-found"].includes(error?.code)){
+        leaveRoom(true,false);
+        return;
+      }
       button.disabled=false;
       button.textContent="Salir de la sala";
       alert(error?.message||"No se pudo salir del partido.");
