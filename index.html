@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./v2.css?v=20260904-13">
+<link rel="stylesheet" href="./v2.css?v=20260904-14">
 <title>Mercado Élite 5 - Multiplayer</title>
 <style>
 *{
@@ -1953,7 +1953,6 @@ position: fixed;
 <section id="lobbyScreen" class="lobby-wrap">
   <div class="lobby-card">
     <div id="firebaseStatus" class="firebase-status" style="display:none;"></div>
-    <button id="openRulesButton" class="rules-open-button" type="button">📖 REGLAS</button>
     <button id="createRoomButton" class="lobby-button" type="button">🔒 CREAR PARTIDA PRIVADA</button>
 
     <div class="open-room-box">
@@ -1985,25 +1984,9 @@ position: fixed;
       <button id="copyRoomButton" class="lobby-button ghost" type="button">COPIAR CÓDIGO</button>
       <div id="waitingText" style="margin-top:12px;color:#9fb0a6;font-size:12px;">Esperando al rival...</div>
     </div>
+    <button id="openRulesButton" class="rules-open-button" type="button">📖 Ver reglas del juego</button>
   </div>
 </section>
-
-<section id="gameScreen" class="screen-hidden">
-  <div id="connectionBar" class="connection-bar">
-    <div><span id="connectionDot" class="connection-dot"></span><span id="connectionText">Conectando...</span></div>
-    <div>Sala <strong id="gameRoomCode">------</strong></div>
-    <div id="myTeamPill" class="my-team-pill">Equipo ?</div>
-  </div>
-  <div class="spectator-counter-row">
-    <div id="spectatorCounter" class="spectator-counter" title="Espectadores conectados">👁 <strong id="spectatorCount">0</strong></div>
-  </div>
-  <div id="spectatorToast" class="spectator-toast" aria-live="polite">👁 Entró un espectador</div>
-
-  <aside id="reconnectBanner" class="reconnect-banner hidden" aria-live="assertive">
-    <strong id="reconnectTitle">Conexión interrumpida</strong>
-    <span id="reconnectMessage">Esperando que el jugador vuelva…</span>
-    <b id="reconnectCountdown">2:00</b>
-  </aside>
 
   <div id="rulesModal" class="rules-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="rulesModalTitle">
     <article class="rules-modal-card">
@@ -2100,6 +2083,23 @@ position: fixed;
       </footer>
     </article>
   </div>
+
+<section id="gameScreen" class="screen-hidden">
+  <div id="connectionBar" class="connection-bar">
+    <div><span id="connectionDot" class="connection-dot"></span><span id="connectionText">Conectando...</span></div>
+    <div>Sala <strong id="gameRoomCode">------</strong></div>
+    <div id="myTeamPill" class="my-team-pill">Equipo ?</div>
+  </div>
+  <div class="spectator-counter-row">
+    <div id="spectatorCounter" class="spectator-counter" title="Espectadores conectados">👁 <strong id="spectatorCount">0</strong></div>
+  </div>
+  <div id="spectatorToast" class="spectator-toast" aria-live="polite">👁 Entró un espectador</div>
+
+  <aside id="reconnectBanner" class="reconnect-banner hidden" aria-live="assertive">
+    <strong id="reconnectTitle">Conexión interrumpida</strong>
+    <span id="reconnectMessage">Esperando que el jugador vuelva…</span>
+    <b id="reconnectCountdown">2:00</b>
+  </aside>
 
   <div id="gameDialog" class="game-dialog-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="gameDialogTitle">
     <div class="game-dialog-card">
