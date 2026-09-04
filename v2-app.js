@@ -473,7 +473,7 @@ function bindUI(){
         if(!confirm(`¿Salir de “${name}”? Podrás volver a unirte mientras siga habiendo lugar.`)) return;
         leave.disabled=true;
         msg.textContent="Saliendo del torneo...";
-        await httpsCallable(functions,"leaveTournament")({tournamentId:leave.dataset.leaveTournament});
+        await httpsCallable(functions,"openTournamentMatch")({action:"leaveTournament",tournamentId:leave.dataset.leaveTournament});
         tournamentExpansionOverrides.delete(leave.dataset.leaveTournament);
       }
       if(cancelReady){
