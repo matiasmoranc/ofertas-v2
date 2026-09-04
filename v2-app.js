@@ -158,15 +158,14 @@ function renderProfile(userData={}){
   profile=p;
   if(el("currentUsername")) el("currentUsername").textContent=p.username||"Jugador";
   if(el("quickRecord")) el("quickRecord").textContent=`${s.played} PJ · ${s.won} PG`;
-  const points=s.won*3+s.drawn, avg=s.played?(s.goalsFor/s.played).toFixed(1):"0.0";
+  const avg=s.played?(s.goalsFor/s.played).toFixed(1):"0.0";
   if(el("profilePanelContent")) el("profilePanelContent").innerHTML=`
-    <div class="profile-hero"><strong>@${esc(p.username||"jugador")}</strong><span>${esc(p.email||"")}</span></div>
+    <div class="profile-hero"><strong>${esc(p.username||"jugador")}</strong></div>
     <div class="profile-stats">
       <div class="profile-stat"><strong>${s.played}</strong><span>PARTIDOS</span></div>
       <div class="profile-stat"><strong>${s.won}</strong><span>GANADOS</span></div>
       <div class="profile-stat"><strong>${s.drawn}</strong><span>EMPATES</span></div>
       <div class="profile-stat"><strong>${s.lost}</strong><span>PERDIDOS</span></div>
-      <div class="profile-stat"><strong>${points}</strong><span>PUNTOS</span></div>
       <div class="profile-stat"><strong>${avg}</strong><span>GOLES/PARTIDO</span></div>
       <div class="profile-stat tournament-stat"><strong>🏆 ${s.tournamentsWon}</strong><span>TORNEOS GANADOS</span></div>
     </div>`;
@@ -174,14 +173,40 @@ function renderProfile(userData={}){
 }
 function renderHistory(history,stats={}){
   const node=el("historyPanelContent"); if(!node) return;
-  const items=Object.values(history||{}).sort((a,b)=>(b.finishedAt||0)-(a.finishedAt||0));
+  const matches=Object.values(history||{});
   const trophy=`<div class="tournament-wins-summary"><span>🏆</span><div><strong>${Number(stats.tournamentsWon||0)}</strong><small>TORNEOS GANADOS</small></div></div>`;
-  if(!items.length){node.innerHTML=trophy+'<div class="empty-state">Todavía no jugaste partidos registrados.</div>';return;}
-  node.innerHTML=trophy+'<div class="history-list">'+items.map(m=>{
-    const cls=m.outcome==="win"?"outcome-win":m.outcome==="loss"?"outcome-loss":"outcome-draw";
-    const label=m.outcome==="win"?"VICTORIA":m.outcome==="loss"?"DERROTA":"EMPATE";
-    return `<div class="history-item"><div class="history-row"><div><strong>vs ${esc(m.opponentName||"Rival")}</strong><div class="item-meta">${new Date(m.finishedAt||Date.now()).toLocaleDateString("es-UY")}${m.tournamentName?" · "+esc(m.tournamentName):""}</div></div><div style="text-align:right"><div class="history-score">${m.myGoals} - ${m.opponentGoals}</div><small class="${cls}">${label}</small></div></div></div>`;
-  }).join("")+"</div>";
+  if(!matches.length){
+    node.innerHTML=trophy+'<div class="empty-state">Todavía no jugaste partidos registrados.</div>';
+    return;
+  }
+
+  const rivals={};
+  matches.forEach(match=>{
+    const name=match.opponentName||"Rival";
+    const key=match.opponentUid||name.trim().toLowerCase();
+    if(!rivals[key]) rivals[key]={name,wins:0,draws:0,losses:0,total:0,lastPlayed:0};
+    const rival=rivals[key];
+    rival.name=name;
+    rival.total++;
+    rival.lastPlayed=Math.max(rival.lastPlayed,Number(match.finishedAt||0));
+    if(match.outcome==="win") rival.wins++;
+    else if(match.outcome==="loss") rival.losses++;
+    else rival.draws++;
+  });
+
+  const items=Object.values(rivals).sort((a,b)=>b.lastPlayed-a.lastPlayed);
+  node.innerHTML=trophy+'<div class="history-list">'+items.map(rival=>`
+    <div class="history-item rivalry-item">
+      <div class="rivalry-head">
+        <strong>vs ${esc(rival.name)}</strong>
+        <span>${rival.total} ${rival.total===1?"partido":"partidos"}</span>
+      </div>
+      <div class="rivalry-record">
+        <div class="outcome-win"><strong>${rival.wins}</strong><span>GANADOS</span></div>
+        <div class="outcome-draw"><strong>${rival.draws}</strong><span>EMPATADOS</span></div>
+        <div class="outcome-loss"><strong>${rival.losses}</strong><span>PERDIDOS</span></div>
+      </div>
+    </div>`).join("")+"</div>";
 }
 function renderTournaments(data={}){
   const node=el("tournamentsPanelContent"); if(!node) return;
