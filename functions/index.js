@@ -291,14 +291,10 @@ exports.openTournamentMatch=onCall(async request=>{
       if(!initial.participants?.[targetUid]){
         throw new HttpsError("not-found","Ese jugador ya no participa en la copa.");
       }
-      const removed=await tournamentRef.transaction(tournament=>{
-        if(!tournament || tournament.status!=="waiting" || tournament.matches) return;
-        if(!tournament.participants?.[targetUid]) return tournament;
-        delete tournament.participants[targetUid];
-        return tournament;
-      });
-      if(!removed.committed){
-        throw new HttpsError("failed-precondition","La copa comenzó mientras realizabas el cambio.");
+      await tournamentRef.child(`participants/${targetUid}`).remove();
+      const confirmed=(await tournamentRef.get()).val();
+      if(confirmed?.participants?.[targetUid]){
+        throw new HttpsError("aborted","No se pudo quitar al jugador de la copa.");
       }
       return {ok:true};
     }
