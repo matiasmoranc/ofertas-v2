@@ -255,3 +255,114 @@ body.dialog-open{overflow:hidden}
   .game-dialog-actions button{width:100%}
   .reconnect-banner{top:calc(8px + env(safe-area-inset-top))}
 }
+
+
+/* Reglamento del lobby */
+.rules-open-button{
+  width:100%;
+  margin:0 0 14px;
+  padding:12px 15px;
+  border:1px solid rgba(186,255,66,.38);
+  border-radius:14px;
+  background:rgba(186,255,66,.08);
+  color:#baff42;
+  font-size:13px;
+  font-weight:900;
+  letter-spacing:.8px;
+  cursor:pointer;
+}
+.rules-open-button:hover{background:rgba(186,255,66,.14)}
+.rules-modal-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:480;
+  display:grid;
+  place-items:center;
+  padding:18px;
+  background:rgba(0,0,0,.76);
+  backdrop-filter:blur(6px);
+}
+.rules-modal-card{
+  display:flex;
+  flex-direction:column;
+  width:min(100%,700px);
+  max-height:min(90vh,850px);
+  overflow:hidden;
+  border:1px solid rgba(186,255,66,.28);
+  border-radius:22px;
+  background:#0c1c14;
+  color:#fff;
+  box-shadow:0 24px 70px rgba(0,0,0,.72);
+}
+.rules-modal-header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:18px;
+  padding:20px 22px 16px;
+  border-bottom:1px solid rgba(255,255,255,.1);
+}
+.rules-modal-header span{
+  color:#baff42;
+  font-size:10px;
+  font-weight:900;
+  letter-spacing:1.8px;
+}
+.rules-modal-header h2{margin:5px 0 0;font-size:24px;line-height:1.15}
+.rules-modal-header button{
+  flex:0 0 auto;
+  width:38px;
+  height:38px;
+  padding:0;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:50%;
+  background:rgba(255,255,255,.07);
+  color:#fff;
+  font-size:17px;
+  cursor:pointer;
+}
+.rules-modal-content{
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  padding:18px 22px 6px;
+}
+.rules-modal-content section{
+  margin-bottom:14px;
+  padding:15px 16px;
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:15px;
+  background:rgba(255,255,255,.035);
+}
+.rules-modal-content h3{margin:0 0 8px;color:#f7fff9;font-size:16px}
+.rules-modal-content p,.rules-modal-content li{
+  color:#b9c7be;
+  font-size:13px;
+  line-height:1.5;
+}
+.rules-modal-content p{margin:0}
+.rules-modal-content ul{margin:8px 0 0;padding-left:20px}
+.rules-modal-content li+li{margin-top:5px}
+.rules-modal-content strong{color:#d8ff90}
+.rules-modal-footer{
+  padding:14px 22px 20px;
+  border-top:1px solid rgba(255,255,255,.1);
+}
+.rules-modal-footer button{
+  width:100%;
+  padding:13px;
+  border:0;
+  border-radius:13px;
+  background:#baff42;
+  color:#07100b;
+  font-weight:900;
+  cursor:pointer;
+}
+@media(max-width:520px){
+  .rules-modal-backdrop{padding:8px}
+  .rules-modal-card{max-height:calc(100dvh - 16px);border-radius:18px}
+  .rules-modal-header{padding:17px 16px 14px}
+  .rules-modal-header h2{font-size:20px}
+  .rules-modal-content{padding:14px 14px 2px}
+  .rules-modal-content section{padding:13px}
+  .rules-modal-footer{padding:12px 14px 14px}
+}
