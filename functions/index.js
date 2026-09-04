@@ -188,12 +188,15 @@ exports.openTournamentMatch=onCall(async request=>{
   if(!["ready","playing"].includes(initial.status) || initial.winnerUid) throw new HttpsError("failed-precondition","Ese partido no está disponible.");
 
   if(request.data?.action==="cancelReady"){
-    if(initial.status!=="ready" || initial.roomCode){
+    // También recupera cruces antiguos que quedaron marcados como "playing"
+    // sin haberse creado una sala. Un partido real siempre tiene roomCode.
+    if(initial.roomCode){
       throw new HttpsError("failed-precondition","La espera ya terminó y no se puede cancelar.");
     }
     const reset=await matchRef.transaction(match=>{
-      if(!match || match.winnerUid || match.status!=="ready" || match.roomCode) return;
+      if(!match || match.winnerUid || match.roomCode) return;
       delete match.readyPlayers;
+      delete match.startedAt;
       match.status="ready";
       return match;
     });
