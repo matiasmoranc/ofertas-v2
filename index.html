@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./v2.css?v=20260904-11">
+<link rel="stylesheet" href="./v2.css?v=20260904-12">
 <title>Mercado Élite 5 - Multiplayer</title>
 <style>
 *{
@@ -1998,6 +1998,23 @@ position: fixed;
   </div>
   <div id="spectatorToast" class="spectator-toast" aria-live="polite">👁 Entró un espectador</div>
 
+  <aside id="reconnectBanner" class="reconnect-banner hidden" aria-live="assertive">
+    <strong id="reconnectTitle">Conexión interrumpida</strong>
+    <span id="reconnectMessage">Esperando que el jugador vuelva…</span>
+    <b id="reconnectCountdown">2:00</b>
+  </aside>
+
+  <div id="gameDialog" class="game-dialog-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="gameDialogTitle">
+    <div class="game-dialog-card">
+      <h2 id="gameDialogTitle">Confirmar</h2>
+      <p id="gameDialogMessage"></p>
+      <div class="game-dialog-actions">
+        <button id="gameDialogCancel" type="button" class="game-dialog-cancel">Cancelar</button>
+        <button id="gameDialogConfirm" type="button" class="game-dialog-confirm">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
   <div id="emojiReactionOverlay" class="emoji-reaction-overlay" aria-live="polite"></div>
   <div id="matchEmojiControls" class="match-emoji-controls hidden">
     <div id="matchEmojiMenu" class="match-emoji-menu hidden" aria-label="Emojis del partido">
@@ -2218,8 +2235,8 @@ position: fixed;
 
 <script type="module">
 import { firebaseConfig } from "./firebase-config.js";
-import { startV2App, getV2Profile, forfeitTournamentMatch, forfeitOpenMatch, markTournamentMatchEntered, sendMatchEmoji, syncOfficialGameResult, readyTournamentRematch, postponeTournamentRematch } from "./v2-app.js?v=20260904-21";
-import { getDatabase, ref, get, update, onValue, runTransaction, remove, set, onDisconnect } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
+import { startV2App, getV2Profile, forfeitTournamentMatch, forfeitOpenMatch, claimDisconnectedMatch, markTournamentMatchEntered, sendMatchEmoji, syncOfficialGameResult, readyTournamentRematch, postponeTournamentRematch } from "./v2-app.js?v=20260904-22";
+import { getDatabase, ref, get, update, onValue, runTransaction, remove, set, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
 
 /* =================================================
    1) PEGÁ ACÁ TU CONFIGURACIÓN DE FIREBASE
@@ -2465,6 +2482,15 @@ let spectatorPresenceRef = null;
 let spectatorDisconnectHandle = null;
 let lastSpectatorCount = null;
 let spectatorToastTimer = null;
+let playerPresenceRef = null;
+let playerPresenceCode = "";
+let playerDisconnectHandle = null;
+let unsubscribeConnection = null;
+let opponentDisconnected = false;
+let disconnectCountdownTimer = null;
+let disconnectClaimTimer = null;
+let disconnectClaimInFlight = false;
+let activeDialogResolve = null;
 let lastEmojiEventId = "";
 let emojiEventInitialized = false;
 let emojiReactionTimer = null;
@@ -2701,12 +2727,51 @@ function prepareNextAuctionInState(state,eventPrefix=""){
   state.message=(eventPrefix ? eventPrefix+" " : "")+instruction;
 }
 
+function closeGameDialog(value){
+  const dialog=$("gameDialog");
+  dialog.classList.add("hidden");
+  document.body.classList.remove("dialog-open");
+  const resolve=activeDialogResolve;
+  activeDialogResolve=null;
+  if(resolve) resolve(value);
+}
+
+function showGameDialog({title="Aviso",message="",confirmText="Aceptar",cancelText="",danger=false}={}){
+  if(activeDialogResolve) closeGameDialog(false);
+  $("gameDialogTitle").textContent=title;
+  $("gameDialogMessage").textContent=message;
+  const confirmButton=$("gameDialogConfirm");
+  const cancelButton=$("gameDialogCancel");
+  confirmButton.textContent=confirmText;
+  confirmButton.classList.toggle("danger",danger);
+  cancelButton.textContent=cancelText||"Cancelar";
+  cancelButton.classList.toggle("hidden",!cancelText);
+  $("gameDialog").classList.remove("hidden");
+  document.body.classList.add("dialog-open");
+  return new Promise(resolve=>{ activeDialogResolve=resolve; });
+}
+
+window.gameConfirm=(title,message,confirmText="Aceptar")=>showGameDialog({
+  title,message,confirmText,cancelText:"Cancelar",danger:true
+});
+window.gameAlert=(title,message)=>showGameDialog({title,message,confirmText:"Aceptar"});
+
+$("gameDialogConfirm")?.addEventListener("click",()=>closeGameDialog(true));
+$("gameDialogCancel")?.addEventListener("click",()=>closeGameDialog(false));
+$("gameDialog")?.addEventListener("click",event=>{
+  if(event.target===$("gameDialog") && !$("gameDialogCancel").classList.contains("hidden")) closeGameDialog(false);
+});
+
 function canCurrentUserAct(state){
-  return myTeam && state && state.status!=="waiting" && state.currentPlayerIndex!==null && state.currentBidder===myTeam;
+  return myTeam && state && !opponentDisconnected && state.status!=="waiting" && state.currentPlayerIndex!==null && state.currentBidder===myTeam;
 }
 
 async function mutateGame(mutator){
   if(!db || !roomCode || !uid) return;
+  if(opponentDisconnected){
+    if($("message")) $("message").textContent="Partido pausado: esperando que el rival vuelva a conectarse.";
+    return;
+  }
   const gameRef=ref(db,`games/${roomCode}`);
   try{
     const result=await runTransaction(gameRef,current=>{
@@ -4184,6 +4249,141 @@ function listenToSpectators(code){
   );
 }
 
+function clearDisconnectTimers(){
+  if(disconnectCountdownTimer){
+    clearInterval(disconnectCountdownTimer);
+    disconnectCountdownTimer=null;
+  }
+  if(disconnectClaimTimer){
+    clearTimeout(disconnectClaimTimer);
+    disconnectClaimTimer=null;
+  }
+}
+
+function hideReconnectBanner(){
+  clearDisconnectTimers();
+  opponentDisconnected=false;
+  disconnectClaimInFlight=false;
+  $("reconnectBanner")?.classList.add("hidden");
+}
+
+async function claimDisconnectedOpponent(code){
+  if(disconnectClaimInFlight || isSpectator || !myTeam || !code) return;
+  disconnectClaimInFlight=true;
+  try{
+    await claimDisconnectedMatch(code);
+  }catch(error){
+    console.warn("No se pudo resolver la desconexión:",error);
+    if(["functions/failed-precondition","functions/not-found"].includes(error?.code)){
+      hideReconnectBanner();
+    }
+  }finally{
+    disconnectClaimInFlight=false;
+  }
+}
+
+function syncOpponentConnection(state){
+  if(!state || state.result || state.status!=="playing" || !state.playerAUid || !state.playerBUid){
+    hideReconnectBanner();
+    return;
+  }
+
+  let disconnectedUid=null;
+  if(isSpectator){
+    disconnectedUid=[state.playerAUid,state.playerBUid].find(playerUid=>{
+      const presence=state.playerPresence?.[playerUid];
+      return presence?.online===false && Number(presence?.disconnectedAt||0)>0;
+    })||null;
+  }else{
+    const opponentUid=state.playerAUid===uid?state.playerBUid:state.playerAUid;
+    const presence=state.playerPresence?.[opponentUid];
+    if(presence?.online===false && Number(presence?.disconnectedAt||0)>0) disconnectedUid=opponentUid;
+  }
+
+  if(!disconnectedUid){
+    hideReconnectBanner();
+    return;
+  }
+
+  const presence=state.playerPresence?.[disconnectedUid];
+  const disconnectedAt=Number(presence.disconnectedAt);
+  const playerName=disconnectedUid===state.playerAUid
+    ?(state.playerAName||"Equipo Azul")
+    :(state.playerBName||"Equipo Rojo");
+  opponentDisconnected=!isSpectator;
+
+  const renderCountdown=()=>{
+    const remaining=Math.max(0,120000-(Date.now()-disconnectedAt));
+    const seconds=Math.ceil(remaining/1000);
+    $("reconnectTitle").textContent=isSpectator
+      ?`${playerName} perdió la conexión`
+      :"Tu rival perdió la conexión";
+    $("reconnectMessage").textContent=remaining>0
+      ?"El partido está pausado. Puede volver antes de perder 3–0."
+      :"Tiempo agotado. Registrando el resultado…";
+    $("reconnectCountdown").textContent=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,"0")}`;
+    if(remaining<=0){
+      clearDisconnectTimers();
+      if(!isSpectator) claimDisconnectedOpponent(roomCode);
+    }
+  };
+
+  $("reconnectBanner").classList.remove("hidden");
+  clearDisconnectTimers();
+  renderCountdown();
+  if(Date.now()-disconnectedAt<120000){
+    disconnectCountdownTimer=setInterval(renderCountdown,250);
+    if(!isSpectator){
+      disconnectClaimTimer=setTimeout(
+        ()=>claimDisconnectedOpponent(roomCode),
+        Math.max(0,120000-(Date.now()-disconnectedAt))+250
+      );
+    }
+  }
+}
+
+async function stopPlayerPresence(){
+  if(unsubscribeConnection){
+    unsubscribeConnection();
+    unsubscribeConnection=null;
+  }
+  if(playerDisconnectHandle){
+    try{ await playerDisconnectHandle.cancel(); }catch{}
+    playerDisconnectHandle=null;
+  }
+  if(playerPresenceRef){
+    try{ await remove(playerPresenceRef); }catch{}
+    playerPresenceRef=null;
+  }
+  playerPresenceCode="";
+  hideReconnectBanner();
+}
+
+async function startPlayerPresence(code){
+  if(!db || !uid || !code || isSpectator) return;
+  if(playerPresenceCode===code && playerPresenceRef) return;
+  await stopPlayerPresence();
+  playerPresenceCode=code;
+  playerPresenceRef=ref(db,`games/${code}/playerPresence/${uid}`);
+  const connectedRef=ref(db,".info/connected");
+  unsubscribeConnection=onValue(connectedRef,async snapshot=>{
+    if(snapshot.val()!==true || !playerPresenceRef) return;
+    try{
+      playerDisconnectHandle=onDisconnect(playerPresenceRef);
+      await playerDisconnectHandle.set({
+        online:false,
+        disconnectedAt:serverTimestamp()
+      });
+      await set(playerPresenceRef,{
+        online:true,
+        connectedAt:serverTimestamp()
+      });
+    }catch(error){
+      console.warn("No se pudo actualizar la presencia:",error);
+    }
+  });
+}
+
 async function startSpectatorPresence(code){
   if(!db || !code || !isSpectator) return;
 
@@ -4578,6 +4778,7 @@ function syncEmojiExperience(state){
 
 function listenToRoom(code){
   if(unsubscribeGame) unsubscribeGame();
+  if(!isSpectator) startPlayerPresence(code).catch(error=>console.warn("No se pudo iniciar la presencia:",error));
   listenToSpectators(code);
   const roomRef=ref(db,`games/${code}`);
   unsubscribeGame=onValue(roomRef,snapshot=>{
@@ -4598,6 +4799,7 @@ function listenToRoom(code){
     }
 
     syncEmojiExperience(state);
+    syncOpponentConnection(state);
 
     /* Las mesas públicas siguen visibles mientras se juega para que otros
        usuarios puedan entrar como espectadores. Al terminar, se quitan del lobby. */
@@ -4694,6 +4896,7 @@ function leaveRoom(clearUrl=true, closeActiveMatch=false){
 
   stopSpectatorListener();
   stopSpectatorPresence().catch(()=>{});
+  stopPlayerPresence().catch(()=>{});
   if(spectatorToastTimer){
     clearTimeout(spectatorToastTimer);
     spectatorToastTimer=null;
@@ -4791,7 +4994,7 @@ async function chooseTournamentRematch(playNow){
     console.error("No se pudo gestionar la revancha del torneo:",error);
     if(nowButton) nowButton.disabled=false;
     if(laterButton) laterButton.disabled=false;
-    alert(error?.message||"No se pudo gestionar la revancha del torneo.");
+    await window.gameAlert("No se pudo continuar",error?.message||"No se pudo gestionar la revancha del torneo.");
   }
 }
 $("revengeButton").addEventListener("click",()=>{
@@ -4849,14 +5052,14 @@ $("leaveRoomButton").addEventListener("click",async()=>{
       console.error("No se pudo confirmar el resultado:",error);
       button.disabled=false;
       button.textContent="Reintentar guardado";
-      alert("No se pudo guardar el resultado. Revisá tu conexión y volvé a intentarlo.");
+      await window.gameAlert("Resultado sin guardar","No se pudo guardar el resultado. Revisá tu conexión y volvé a intentarlo.");
       return;
     }
   }
   const tournamentId=gameState?.tournamentId;
   const tournamentMatchId=gameState?.tournamentMatchId;
-  if(currentRoomIsOpen && !tournamentId && gameState?.status==="playing" && !gameState?.result && !isSpectator){
-    if(!confirm("¿Salir del partido?\n\nSi salís ahora, tu rival ganará 3–0 y el resultado se guardará en el historial.")) return;
+  if(!tournamentId && gameState?.status==="playing" && !gameState?.result && !isSpectator && gameState?.playerAUid && gameState?.playerBUid){
+    if(!await window.gameConfirm("¿Salir del partido?","Si salís ahora, tu rival ganará 3–0 y el resultado se guardará en el historial.","Salir y perder 3–0")) return;
     const button=$("leaveRoomButton");
     const activeCode=roomCode;
     button.disabled=true;
@@ -4869,7 +5072,7 @@ $("leaveRoomButton").addEventListener("click",async()=>{
       console.error("No se pudo registrar el abandono de la mesa abierta:",error);
       button.disabled=false;
       button.textContent="Salir de la sala";
-      alert(error?.message||"No se pudo registrar el abandono.");
+      await window.gameAlert("No se pudo salir",error?.message||"No se pudo registrar el abandono.");
     }
     return;
   }
@@ -4879,7 +5082,7 @@ $("leaveRoomButton").addEventListener("click",async()=>{
     const warning=opponentEntered
       ?"Si salís ahora, tu rival ganará 3–0."
       :"Tu rival todavía no entró. El partido seguirá pendiente.";
-    if(!confirm(`¿Salir del partido?\n\n${warning}`)) return;
+    if(!await window.gameConfirm("¿Salir del partido?",warning,opponentEntered?"Salir y perder 3–0":"Salir")) return;
     const button=$("leaveRoomButton");
     button.disabled=true;
     button.textContent=opponentEntered?"Registrando abandono...":"Saliendo...";
@@ -4894,7 +5097,7 @@ $("leaveRoomButton").addEventListener("click",async()=>{
       }
       button.disabled=false;
       button.textContent="Salir de la sala";
-      alert(error?.message||"No se pudo salir del partido.");
+      await window.gameAlert("No se pudo salir",error?.message||"No se pudo salir del partido.");
     }
     return;
   }
