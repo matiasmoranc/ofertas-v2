@@ -187,15 +187,31 @@ exports.openTournamentMatch=onCall(async request=>{
   if(![initial.playerAUid,initial.playerBUid].includes(uid)) throw new HttpsError("permission-denied","No participás de este partido.");
   if(!["ready","playing"].includes(initial.status) || initial.winnerUid) throw new HttpsError("failed-precondition","Ese partido no está disponible.");
 
+  const playerProfile=await profileFor(uid);
   const proposedCode=roomCode();
   const locked=await matchRef.transaction(match=>{
     if(!match || match.winnerUid || !["ready","playing"].includes(match.status)) return;
-    if(!match.roomCode) match.roomCode=proposedCode;
-    match.status="playing";
+    match.readyPlayers=match.readyPlayers||{};
+    match.readyPlayers[uid]={uid,username:playerProfile.username,readyAt:Date.now()};
+    const bothReady=Boolean(match.readyPlayers[match.playerAUid] && match.readyPlayers[match.playerBUid]);
+    if(bothReady){
+      if(!match.roomCode) match.roomCode=proposedCode;
+      match.status="playing";
+      match.startedAt=match.startedAt||Date.now();
+    }else{
+      match.status="ready";
+      match.roomCode=null;
+    }
     return match;
   });
   if(!locked.committed) throw new HttpsError("aborted","El cruce cambió. Actualizá e intentá nuevamente.");
-  const match=locked.snapshot.val(), code=match.roomCode;
+  const match=locked.snapshot.val();
+  if(!match.roomCode){
+    const opponentName=match.playerAUid===uid?match.playerBName:match.playerAName;
+    return {waiting:true,message:`Estás pronto. Esperando que ${opponentName||"tu rival"} entre al partido.`};
+  }
+
+  const code=match.roomCode;
   const gameRef=db.ref(`games/${code}`);
   const gameTx=await gameRef.transaction(current=>current||baseTournamentGame(
     code,
@@ -207,8 +223,50 @@ exports.openTournamentMatch=onCall(async request=>{
   return {roomCode:code};
 });
 
+exports.forfeitTournamentMatch=onCall(async request=>{
+  const uid=requireAuth(request);
+  const tournamentId=cleanText(request.data?.tournamentId,80);
+  const matchId=cleanText(request.data?.matchId,30);
+  const match=(await db.ref(`tournaments/${tournamentId}/matches/${matchId}`).get()).val();
+  if(!match || match.status!=="playing" || !match.roomCode || match.winnerUid){
+    throw new HttpsError("failed-precondition","El partido todavía no comenzó o ya finalizó.");
+  }
+  if(![match.playerAUid,match.playerBUid].includes(uid)){
+    throw new HttpsError("permission-denied","No participás de este partido.");
+  }
+
+  const gameRef=db.ref(`games/${match.roomCode}`);
+  const forfeited=await gameRef.transaction(game=>{
+    if(!game || game.result || game.status!=="playing") return;
+    const loser=game.playerAUid===uid?"A":"B";
+    const winner=loser==="A"?"B":"A";
+    game.status="finished";
+    game.message=`🏳️ ${loser==="A"?(game.playerAName||"Equipo Azul"):(game.playerBName||"Equipo Rojo")} abandonó. Victoria 3–0.`;
+    game.result={
+      goalsA:winner==="A"?3:0,
+      goalsB:winner==="B"?3:0,
+      winner,
+      forfeit:true,
+      forfeitedBy:uid,
+      fromMiniMatch:false
+    };
+    return game;
+  });
+  if(!forfeited.committed){
+    throw new HttpsError("failed-precondition","El partido ya había finalizado.");
+  }
+  return {ok:true};
+});
+
 function validOfficialResult(game,result){
   if(!game?.playerAUid || !game?.playerBUid || game.playerAUid===game.playerBUid) return false;
+  if(result?.forfeit===true){
+    const ga=Number(result.goalsA), gb=Number(result.goalsB);
+    return result.forfeitedBy &&
+      [game.playerAUid,game.playerBUid].includes(result.forfeitedBy) &&
+      ((ga===3&&gb===0&&result.winner==="A"&&result.forfeitedBy===game.playerBUid) ||
+       (ga===0&&gb===3&&result.winner==="B"&&result.forfeitedBy===game.playerAUid));
+  }
   const teamA=game.teams?.A, teamB=game.teams?.B;
   /* El mercado puede terminar con menos de cinco jugadores si un equipo
      se queda sin dinero. Es una partida válida siempre que ambos hayan
@@ -241,7 +299,8 @@ async function advanceTournament(game,result,winnerUid,winnerName){
     const match=t?.matches?.[game.tournamentMatchId];
     if(!match || match.winnerUid) return t;
     if(!winnerUid){
-      match.status="ready"; match.roomCode=null; match.draws=Number(match.draws||0)+1;
+      match.status="ready"; match.roomCode=null; delete match.readyPlayers;
+      match.draws=Number(match.draws||0)+1;
       return t;
     }
     match.winnerUid=winnerUid;match.winnerName=winnerName;match.status="completed";
