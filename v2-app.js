@@ -187,25 +187,6 @@ function renderTournaments(data={}){
   for(const [tournamentId,tournament] of Object.entries(data||{})){
     for(const [matchId,match] of Object.entries(tournament?.matches||{})){
       const mine=match?.playerAUid===currentUid || match?.playerBUid===currentUid;
-      const bothReady=Boolean(match?.readyPlayers?.[match?.playerAUid] && match?.readyPlayers?.[match?.playerBUid]);
-      if(match?.status==="ready" && bothReady && mine && !match.winnerUid){
-        const pendingKey=`ready:${tournamentId}:${matchId}`;
-        if(tournamentRoomOpening!==pendingKey){
-          tournamentRoomOpening=pendingKey;
-          queueMicrotask(async()=>{
-            try{
-              const result=await httpsCallable(functions,"openTournamentMatch")({tournamentId,matchId});
-              if(result.data.roomCode) await openTournamentRoomOnce(result.data.roomCode);
-              else tournamentRoomOpening="";
-            }catch(error){
-              tournamentRoomOpening="";
-              tournamentRoomPromise=null;
-              console.error("No se pudo iniciar el partido listo:",error);
-            }
-          });
-        }
-        return;
-      }
       if(match?.status==="playing" && match.roomCode && !match.winnerUid && mine &&
          match.readyPlayers?.[currentUid] && tournamentRoomOpening!==match.roomCode){
         queueMicrotask(()=>openTournamentRoomOnce(match.roomCode).catch(error=>console.error("No se pudo abrir el partido del torneo:",error)));
