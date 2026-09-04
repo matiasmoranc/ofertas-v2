@@ -187,6 +187,33 @@ exports.openTournamentMatch=onCall(async request=>{
   if(![initial.playerAUid,initial.playerBUid].includes(uid)) throw new HttpsError("permission-denied","No participás de este partido.");
   if(!["ready","playing"].includes(initial.status) || initial.winnerUid) throw new HttpsError("failed-precondition","Ese partido no está disponible.");
 
+  if(request.data?.action==="forfeit"){
+    if(initial.status!=="playing" || !initial.roomCode){
+      throw new HttpsError("failed-precondition","El partido todavía no comenzó o ya finalizó.");
+    }
+    const gameRef=db.ref(`games/${initial.roomCode}`);
+    const forfeited=await gameRef.transaction(game=>{
+      if(!game || game.result || game.status!=="playing") return;
+      const loser=game.playerAUid===uid?"A":"B";
+      const winner=loser==="A"?"B":"A";
+      game.status="finished";
+      game.message=`🏳️ ${loser==="A"?(game.playerAName||"Equipo Azul"):(game.playerBName||"Equipo Rojo")} abandonó. Victoria 3–0.`;
+      game.result={
+        goalsA:winner==="A"?3:0,
+        goalsB:winner==="B"?3:0,
+        winner,
+        forfeit:true,
+        forfeitedBy:uid,
+        fromMiniMatch:false
+      };
+      return game;
+    });
+    if(!forfeited.committed){
+      throw new HttpsError("failed-precondition","El partido ya había finalizado.");
+    }
+    return {ok:true};
+  }
+
   const playerProfile=await profileFor(uid);
   const proposedCode=roomCode();
   const locked=await matchRef.transaction(match=>{
@@ -221,41 +248,6 @@ exports.openTournamentMatch=onCall(async request=>{
   ));
   if(!gameTx.committed) throw new HttpsError("internal","No se pudo preparar la partida.");
   return {roomCode:code};
-});
-
-exports.forfeitTournamentMatch=onCall(async request=>{
-  const uid=requireAuth(request);
-  const tournamentId=cleanText(request.data?.tournamentId,80);
-  const matchId=cleanText(request.data?.matchId,30);
-  const match=(await db.ref(`tournaments/${tournamentId}/matches/${matchId}`).get()).val();
-  if(!match || match.status!=="playing" || !match.roomCode || match.winnerUid){
-    throw new HttpsError("failed-precondition","El partido todavía no comenzó o ya finalizó.");
-  }
-  if(![match.playerAUid,match.playerBUid].includes(uid)){
-    throw new HttpsError("permission-denied","No participás de este partido.");
-  }
-
-  const gameRef=db.ref(`games/${match.roomCode}`);
-  const forfeited=await gameRef.transaction(game=>{
-    if(!game || game.result || game.status!=="playing") return;
-    const loser=game.playerAUid===uid?"A":"B";
-    const winner=loser==="A"?"B":"A";
-    game.status="finished";
-    game.message=`🏳️ ${loser==="A"?(game.playerAName||"Equipo Azul"):(game.playerBName||"Equipo Rojo")} abandonó. Victoria 3–0.`;
-    game.result={
-      goalsA:winner==="A"?3:0,
-      goalsB:winner==="B"?3:0,
-      winner,
-      forfeit:true,
-      forfeitedBy:uid,
-      fromMiniMatch:false
-    };
-    return game;
-  });
-  if(!forfeited.committed){
-    throw new HttpsError("failed-precondition","El partido ya había finalizado.");
-  }
-  return {ok:true};
 });
 
 function validOfficialResult(game,result){
