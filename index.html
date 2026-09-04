@@ -4208,13 +4208,26 @@ async function watchOpenRoom(code){
 async function enterTournamentRoom(code){
   if(!db || !uid || !code) return;
   const roomRef=ref(db,`games/${code}`);
-  const tx=await runTransaction(roomRef,state=>{
-    if(!state || (state.playerAUid!==uid && state.playerBUid!==uid)) return;
-    if(state.currentPlayerIndex===null || state.currentPlayerIndex===undefined) prepareNextAuctionInState(state,"🏆 Partido de torneo iniciado.");
-    return state;
-  },{applyLocally:false});
-  if(!tx.committed) throw new Error("No se pudo abrir el partido del torneo.");
-  const state=tx.snapshot.val();
+  const snap=await get(roomRef);
+  if(!snap.exists()) throw new Error("La sala del torneo todavía no está disponible.");
+
+  let state=snap.val();
+  if(state.playerAUid!==uid && state.playerBUid!==uid){
+    throw new Error("No pertenecés a este partido del torneo.");
+  }
+
+  /* Las transacciones del cliente pueden comenzar con un estado local vacío
+     y abortarse. Inicializamos desde una lectura confirmada, igual que al
+     entrar en una sala normal. */
+  if(state.currentPlayerIndex===null || state.currentPlayerIndex===undefined){
+    state=JSON.parse(JSON.stringify(state));
+    prepareNextAuctionInState(state,"🏆 Partido de torneo iniciado.");
+    await update(roomRef,state);
+    const confirmed=await get(roomRef);
+    if(!confirmed.exists()) throw new Error("La sala del torneo desapareció.");
+    state=confirmed.val();
+  }
+
   roomCode=code; myTeam=state.playerAUid===uid?"A":"B"; isSpectator=false;
   currentRoomIsOpen=false; hasShownTeamIntro=false; gameState=state;
   history.replaceState(null,"",`${location.pathname}?room=${code}`);
