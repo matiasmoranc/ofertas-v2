@@ -185,8 +185,6 @@ exports.openTournamentMatch=onCall(async request=>{
   const initial=(await matchRef.get()).val();
   if(!initial) throw new HttpsError("not-found","No existe ese partido.");
   if(![initial.playerAUid,initial.playerBUid].includes(uid)) throw new HttpsError("permission-denied","No participás de este partido.");
-  if(!["ready","playing"].includes(initial.status) || initial.winnerUid) throw new HttpsError("failed-precondition","Ese partido no está disponible.");
-
   if(request.data?.action==="cancelReady"){
     // Recupera tanto esperas normales como salas residuales que fueron
     // reservadas pero donde el mercado nunca llegó a comenzar.
@@ -220,6 +218,13 @@ exports.openTournamentMatch=onCall(async request=>{
       ]);
     }
     return {ok:true};
+  }
+
+  // Para jugar o abandonar, el cruce sí debe continuar disponible.
+  // La recuperación anterior se ejecuta antes porque también repara estados
+  // antiguos o inconsistentes que no coinciden con ready/playing.
+  if(!["ready","playing"].includes(initial.status) || initial.winnerUid){
+    throw new HttpsError("failed-precondition","Ese partido no está disponible.");
   }
 
   if(request.data?.action==="forfeit"){
