@@ -60,3 +60,7 @@ body.auth-loading .boot-loader{display:flex}
 .tournament-ready-popup .tournament-ready-play{width:100%;min-height:50px;margin-bottom:12px}
 .tournament-ready-popup small{display:block;color:#8ea198;font-size:11px;line-height:1.4}
 @media(max-width:520px){.tournament-ready-popup{padding:25px 18px 20px}.tournament-ready-popup h3{font-size:20px}}
+
+/* Control compacto para desplegar o comprimir cada torneo */
+.tournament-toggle-icon{display:inline-grid;place-items:center;width:34px;height:34px;min-width:34px;padding:0;border-radius:50%;font-size:20px;line-height:1}
+.tournament-toggle-icon span{display:block;transform:translateY(-1px)}
