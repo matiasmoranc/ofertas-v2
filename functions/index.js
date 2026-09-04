@@ -420,14 +420,25 @@ async function advanceTournament(game,result,winnerUid,winnerName){
     }
     match.winnerUid=winnerUid;match.winnerName=winnerName;match.status="completed";
     match.score={A:result.goalsA,B:result.goalsB};
+    match.roomCode=null;
+    delete match.readyPlayers;
     if(game.tournamentMatchId==="final"){
       t.status="completed";t.winnerUid=winnerUid;t.winnerName=winnerName;t.finishedAt=Date.now();
     }else{
+      const finalMatch={...(t.matches.final||{}),label:"FINAL",status:"pending"};
+      if(game.tournamentMatchId==="semifinal1"){
+        finalMatch.playerAUid=winnerUid;
+        finalMatch.playerAName=winnerName;
+      }else{
+        finalMatch.playerBUid=winnerUid;
+        finalMatch.playerBName=winnerName;
+      }
       const s1=t.matches.semifinal1, s2=t.matches.semifinal2;
       if(s1?.winnerUid&&s2?.winnerUid){
         t.status="final";
-        t.matches.final={...(t.matches.final||{}),label:"FINAL",status:"ready",playerAUid:s1.winnerUid,playerAName:s1.winnerName,playerBUid:s2.winnerUid,playerBName:s2.winnerName};
+        finalMatch.status="ready";
       }
+      t.matches.final=finalMatch;
     }
     return t;
   });
