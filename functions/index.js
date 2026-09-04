@@ -188,19 +188,37 @@ exports.openTournamentMatch=onCall(async request=>{
   if(!["ready","playing"].includes(initial.status) || initial.winnerUid) throw new HttpsError("failed-precondition","Ese partido no está disponible.");
 
   if(request.data?.action==="cancelReady"){
-    // También recupera cruces antiguos que quedaron marcados como "playing"
-    // sin haberse creado una sala. Un partido real siempre tiene roomCode.
-    if(initial.roomCode){
-      throw new HttpsError("failed-precondition","La espera ya terminó y no se puede cancelar.");
+    // Recupera tanto esperas normales como salas residuales que fueron
+    // reservadas pero donde el mercado nunca llegó a comenzar.
+    const staleCode=cleanText(initial.roomCode,12);
+    let staleGame=null;
+    if(staleCode) staleGame=(await db.ref(`games/${staleCode}`).get()).val();
+    const untouchedGame=!staleGame || (
+      !staleGame.result &&
+      !staleGame.miniMatch &&
+      (!Array.isArray(staleGame.teams?.A) || staleGame.teams.A.length===0) &&
+      (!Array.isArray(staleGame.teams?.B) || staleGame.teams.B.length===0) &&
+      Number(staleGame.money?.A??20)===20 &&
+      Number(staleGame.money?.B??20)===20
+    );
+    if(staleCode && !untouchedGame){
+      throw new HttpsError("failed-precondition","El partido ya comenzó y no se puede cancelar la espera.");
     }
     const reset=await matchRef.transaction(match=>{
-      if(!match || match.winnerUid || match.roomCode) return;
+      if(!match || match.winnerUid) return;
       delete match.readyPlayers;
       delete match.startedAt;
+      delete match.roomCode;
       match.status="ready";
       return match;
     });
     if(!reset.committed) throw new HttpsError("aborted","La espera cambió. Actualizá e intentá nuevamente.");
+    if(staleCode){
+      await Promise.all([
+        db.ref(`games/${staleCode}`).remove(),
+        db.ref(`matches/${staleCode}`).remove()
+      ]);
+    }
     return {ok:true};
   }
 
