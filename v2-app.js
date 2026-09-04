@@ -9,8 +9,36 @@ import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/
 
 let profile=null, auth=null, db=null, functions=null, stopUser=null, stopTournaments=null;
 let callbacks={};
+let tournamentRoomOpening="";
+let tournamentRoomPromise=null;
+
+async function openTournamentRoomOnce(code){
+  if(!code) return;
+  if(tournamentRoomOpening===code && tournamentRoomPromise) return tournamentRoomPromise;
+  tournamentRoomOpening=code;
+  tournamentRoomPromise=(async()=>{
+    let lastError;
+    for(let attempt=0;attempt<6;attempt++){
+      try{
+        await callbacks.onTournamentRoom?.(code);
+        return;
+      }catch(error){
+        lastError=error;
+        await new Promise(resolve=>setTimeout(resolve,500));
+      }
+    }
+    tournamentRoomOpening="";
+    tournamentRoomPromise=null;
+    throw lastError||new Error("No se pudo abrir el partido.");
+  })();
+  return tournamentRoomPromise;
+}
 
 export function getV2Profile(){ return profile; }
+export async function forfeitTournamentMatch(tournamentId,matchId){
+  if(!functions || !tournamentId || !matchId) return;
+  return httpsCallable(functions,"forfeitTournamentMatch")({tournamentId,matchId});
+}
 
 function el(id){ return document.getElementById(id); }
 function finishBootLoading(){
@@ -155,21 +183,44 @@ function renderTournaments(data={}){
   const node=el("tournamentsPanelContent"); if(!node) return;
   const list=Object.entries(data).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
   node.innerHTML=`<div class="tournament-create"><input id="tournamentName" class="auth-input" maxlength="28" placeholder="Nombre del torneo"><button id="createTournamentButton" class="small-action green">CREAR</button></div><div id="tournamentMessage" class="auth-message"></div><div class="tournament-list">${list.length?list.map(([id,t])=>tournamentCard(id,t)).join(""):'<div class="empty-state">No hay torneos todavía. Creá el primero.</div>'}</div>`;
+  const currentUid=auth.currentUser?.uid;
+  for(const tournament of Object.values(data||{})){
+    for(const match of Object.values(tournament?.matches||{})){
+      if(match?.status==="playing" && match.roomCode && !match.winnerUid &&
+         (match.playerAUid===currentUid || match.playerBUid===currentUid) &&
+         match.readyPlayers?.[currentUid] && tournamentRoomOpening!==match.roomCode){
+        queueMicrotask(()=>openTournamentRoomOnce(match.roomCode).catch(error=>console.error("No se pudo abrir el partido del torneo:",error)));
+        return;
+      }
+    }
+  }
 }
 function bracketPlayer(name,fallback="Por definir"){
   return `<span class="bracket-player">${esc(name||fallback)}</span>`;
 }
 function bracketMatch(tournamentId,matchId,match){
   const m=match||{};
-  const mine=m.playerAUid===auth.currentUser?.uid||m.playerBUid===auth.currentUser?.uid;
-  const canOpen=mine && ["ready","playing"].includes(m.status) && !m.winnerUid;
+  const currentUid=auth.currentUser?.uid;
+  const mine=m.playerAUid===currentUid||m.playerBUid===currentUid;
+  const readyPlayers=m.readyPlayers||{};
+  const mineReady=Boolean(readyPlayers[currentUid]);
+  const opponentUid=m.playerAUid===currentUid?m.playerBUid:m.playerAUid;
+  const opponentReady=Boolean(readyPlayers[opponentUid]);
+  const readyNames=Object.values(readyPlayers).map(player=>player?.username).filter(Boolean);
+  const canOpen=mine && m.status==="ready" && !m.winnerUid && !mineReady;
+  const canReenter=mine && m.status==="playing" && Boolean(m.roomCode) && !m.winnerUid;
   const hasScore=m.score && Number.isFinite(Number(m.score.A)) && Number.isFinite(Number(m.score.B));
-  const status=m.winnerUid?"FINALIZADO":m.status==="playing"?"EN JUEGO":m.status==="ready"?"LISTO":"POR DEFINIR";
+  const status=m.winnerUid?"FINALIZADO":m.status==="playing"?"EN JUEGO":readyNames.length?"ESPERANDO RIVAL":"LISTO";
+  const readyNotice=readyNames.length
+    ? `<div class="item-meta" style="margin:8px 0;color:#baff42">${readyNames.map(name=>esc(name)).join(" y ")} ${readyNames.length===1?"está pronto para jugar":"están prontos para jugar"}</div>`
+    : "";
+  const buttonText=canReenter?"ENTRAR AL PARTIDO":opponentReady?`${esc(readyPlayers[opponentUid]?.username||"Tu rival")} ESTÁ PRONTO · JUGAR`:"JUGAR";
   return `<div class="elimination-match ${m.winnerUid?"completed":""}">
     <div class="elimination-status">${status}</div>
     <div class="bracket-player-row ${m.winnerUid===m.playerAUid?"winner":""}">${bracketPlayer(m.playerAName)}<strong>${hasScore?m.score.A:"–"}</strong></div>
     <div class="bracket-player-row ${m.winnerUid===m.playerBUid?"winner":""}">${bracketPlayer(m.playerBName)}<strong>${hasScore?m.score.B:"–"}</strong></div>
-    ${canOpen?`<button class="small-action bracket-play" data-open-tournament="${esc(tournamentId)}" data-match="${esc(matchId)}">JUGAR</button>`:""}
+    ${readyNotice}
+    ${canOpen||canReenter?`<button class="small-action bracket-play" data-open-tournament="${esc(tournamentId)}" data-match="${esc(matchId)}">${buttonText}</button>`:mineReady&&m.status==="ready"?'<button class="small-action bracket-play" disabled>ESPERANDO AL RIVAL…</button>':""}
   </div>`;
 }
 function tournamentBracket(id,t){
@@ -246,7 +297,16 @@ function bindUI(){
     try{
       if(create){const name=el("tournamentName").value.trim();if(name.length<3)throw new Error("Escribí un nombre para el torneo.");msg.textContent="Creando torneo...";await httpsCallable(functions,"createTournament")({name});}
       if(join){msg.textContent="Uniéndote...";await httpsCallable(functions,"joinTournament")({tournamentId:join.dataset.joinTournament});}
-      if(open){msg.textContent="Preparando partido...";const result=await httpsCallable(functions,"openTournamentMatch")({tournamentId:open.dataset.openTournament,matchId:open.dataset.match});await callbacks.onTournamentRoom?.(result.data.roomCode);}
+      if(open){
+        msg.textContent="Marcándote como pronto...";
+        const result=await httpsCallable(functions,"openTournamentMatch")({tournamentId:open.dataset.openTournament,matchId:open.dataset.match});
+        if(result.data.roomCode){
+          await openTournamentRoomOnce(result.data.roomCode);
+        }else{
+          msg.textContent=result.data.message||"Estás pronto. Esperando que entre tu rival...";
+          return;
+        }
+      }
       if(remove){
         const card=remove.closest(".tournament-item"), name=card?.querySelector(".tournament-name")?.textContent||"este torneo";
         if(!confirm(`¿Eliminar definitivamente “${name}”?\n\nSe cerrarán sus partidos abiertos y esta acción no se puede deshacer.`)) return;
