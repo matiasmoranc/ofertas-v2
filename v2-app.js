@@ -85,7 +85,7 @@ function showReadyInvite(invite){
     }catch(error){
       button.disabled=false;
       button.textContent="JUGAR AHORA";
-      alert(error?.message||"No se pudo abrir el partido.");
+      await window.gameAlert("No se pudo abrir el partido",error?.message||"Intentá nuevamente.");
     }
   };
   document.body.appendChild(modal);
@@ -453,29 +453,29 @@ async function handleAdminClick(event){
       await adminRequest("adminSetCups",{targetUid:cups.dataset.uid,cups:value});
     }
     if(resetStats){
-      if(!confirm("¿Reiniciar todos los partidos y estadísticas de este usuario? Las copas se conservarán.")) return;
+      if(!await window.gameConfirm("¿Reiniciar estadísticas?","Se eliminarán todos los partidos y estadísticas de este usuario. Las copas se conservarán.","Reiniciar")) return;
       await adminRequest("adminResetStats",{targetUid:resetStats.dataset.adminResetStats});
     }
     if(deleteUser){
-      if(!confirm(`¿Eliminar definitivamente al usuario “${deleteUser.dataset.name}”? Esta acción no se puede deshacer.`)) return;
+      if(!await window.gameConfirm("¿Eliminar usuario?",`Se eliminará definitivamente a “${deleteUser.dataset.name}”. Esta acción no se puede deshacer.`,"Eliminar")) return;
       await adminRequest("adminDeleteUser",{targetUid:deleteUser.dataset.adminDeleteUser});
     }
     if(removeParticipant){
-      if(!confirm(`¿Quitar a “${removeParticipant.dataset.name}” de la copa “${removeParticipant.dataset.cupName}”?`)) return;
+      if(!await window.gameConfirm("¿Quitar participante?",`Se quitará a “${removeParticipant.dataset.name}” de la copa “${removeParticipant.dataset.cupName}”.`,"Quitar")) return;
       await adminRequest("adminRemoveParticipant",{tournamentId:removeParticipant.dataset.tournament,targetUid:removeParticipant.dataset.uid});
     }
     if(deleteTournament){
-      if(!confirm(`¿Eliminar definitivamente la copa “${deleteTournament.dataset.name}”?`)) return;
+      if(!await window.gameConfirm("¿Eliminar copa?",`Se eliminará definitivamente la copa “${deleteTournament.dataset.name}”.`,"Eliminar")) return;
       await adminRequest("adminDeleteTournament",{tournamentId:deleteTournament.dataset.adminDeleteTournament});
     }
     if(resetMatch){
-      if(!confirm("¿Reiniciar este partido? Volverá a quedar pendiente y se eliminará la sala actual.")) return;
+      if(!await window.gameConfirm("¿Reiniciar partido?","Volverá a quedar pendiente y se eliminará la sala actual.","Reiniciar")) return;
       await adminRequest("adminResetMatch",{tournamentId:resetMatch.dataset.tournament,matchId:resetMatch.dataset.match});
     }
     await loadAdminPanel();
   }catch(error){
     if(message){message.textContent=error?.message||"No se pudo completar la acción.";message.className="auth-message error";}
-    else alert(error?.message||"No se pudo completar la acción.");
+    else await window.gameAlert("No se pudo completar la acción",error?.message||"Intentá nuevamente.");
   }
 }
 
@@ -623,14 +623,14 @@ function bindUI(){
       if(join){msg.textContent="Uniéndote...";await httpsCallable(functions,"joinTournament")({tournamentId:join.dataset.joinTournament});}
       if(leave){
         const card=leave.closest(".tournament-item"), name=card?.querySelector(".tournament-name")?.textContent||"este torneo";
-        if(!confirm(`¿Salir de “${name}”? Podrás volver a unirte mientras siga habiendo lugar.`)) return;
+        if(!await window.gameConfirm("¿Salir de la copa?",`Vas a salir de “${name}”. Podrás volver a unirte mientras siga habiendo lugar.`,"Salir")) return;
         leave.disabled=true;
         msg.textContent="Saliendo del torneo...";
         await httpsCallable(functions,"openTournamentMatch")({action:"leaveTournament",tournamentId:leave.dataset.leaveTournament});
         tournamentExpansionOverrides.delete(leave.dataset.leaveTournament);
       }
       if(cancelReady){
-        if(!confirm("¿Cancelar la espera? Los dos jugadores dejarán de figurar como prontos.")) return;
+        if(!await window.gameConfirm("¿Cancelar la espera?","Los dos jugadores dejarán de figurar como prontos.","Cancelar espera")) return;
         msg.textContent="Cancelando espera...";
         await httpsCallable(functions,"openTournamentMatch")({
           tournamentId:cancelReady.dataset.cancelReady,
@@ -652,7 +652,7 @@ function bindUI(){
       }
       if(remove){
         const card=remove.closest(".tournament-item"), name=card?.querySelector(".tournament-name")?.textContent||"este torneo";
-        if(!confirm(`¿Eliminar definitivamente “${name}”?\n\nSe cerrarán sus partidos abiertos y esta acción no se puede deshacer.`)) return;
+        if(!await window.gameConfirm("¿Eliminar torneo?",`Se eliminará definitivamente “${name}” y se cerrarán sus partidos abiertos. Esta acción no se puede deshacer.`,"Eliminar")) return;
         remove.disabled=true; msg.textContent="Eliminando torneo...";
         await httpsCallable(functions,"deleteTournament")({tournamentId:remove.dataset.deleteTournament});
       }
