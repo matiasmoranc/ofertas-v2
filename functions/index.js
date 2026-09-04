@@ -209,7 +209,10 @@ exports.openTournamentMatch=onCall(async request=>{
       })).sort((a,b)=>a.username.localeCompare(b.username));
       const tournaments=Object.entries(tournamentsSnap.val()||{}).map(([id,tournament])=>({
         id,name:cleanText(tournament?.name||"Torneo",50),status:tournament?.status||"waiting",
-        participants:Object.keys(tournament?.participants||{}).length,
+        participants:Object.values(tournament?.participants||{}).map(player=>({
+          uid:player?.uid||"",
+          username:cleanText(player?.username||"Sin usuario",40)
+        })),
         matches:Object.entries(tournament?.matches||{}).map(([matchId,match])=>({
           matchId,status:match?.status||"pending",
           label:cleanText(match?.label||matchId,40),
@@ -273,6 +276,30 @@ exports.openTournamentMatch=onCall(async request=>{
       await db.ref().update(cleanup);
       try{ await getAuth().deleteUser(targetUid); }
       catch(error){ if(error?.code!=="auth/user-not-found") throw error; }
+      return {ok:true};
+    }
+
+    if(action==="adminRemoveParticipant"){
+      const tournamentId=cleanText(request.data?.tournamentId,80);
+      const targetUid=cleanText(request.data?.targetUid,128);
+      const tournamentRef=db.ref(`tournaments/${tournamentId}`);
+      const initial=(await tournamentRef.get()).val();
+      if(!initial) throw new HttpsError("not-found","La copa no existe.");
+      if(initial.status!=="waiting" || initial.matches){
+        throw new HttpsError("failed-precondition","La copa ya comenzó. No se puede quitar un jugador sin romper el cuadro.");
+      }
+      if(!initial.participants?.[targetUid]){
+        throw new HttpsError("not-found","Ese jugador ya no participa en la copa.");
+      }
+      const removed=await tournamentRef.transaction(tournament=>{
+        if(!tournament || tournament.status!=="waiting" || tournament.matches) return;
+        if(!tournament.participants?.[targetUid]) return tournament;
+        delete tournament.participants[targetUid];
+        return tournament;
+      });
+      if(!removed.committed){
+        throw new HttpsError("failed-precondition","La copa comenzó mientras realizabas el cambio.");
+      }
       return {ok:true};
     }
 
