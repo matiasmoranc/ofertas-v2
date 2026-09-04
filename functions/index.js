@@ -193,6 +193,22 @@ exports.openTournamentMatch=onCall(async request=>{
     return {ok:true,processed};
   }
 
+  if(request.data?.action==="syncResult"){
+    const code=cleanText(request.data?.roomCode,12);
+    if(!code) throw new HttpsError("invalid-argument","Falta la sala.");
+    const game=(await db.ref(`games/${code}`).get()).val();
+    if(!game) throw new HttpsError("not-found","La partida ya no existe.");
+    if(![game.playerAUid,game.playerBUid].includes(uid)){
+      throw new HttpsError("permission-denied","No participás de esta partida.");
+    }
+    if(!game.result) throw new HttpsError("failed-precondition","El partido todavía no tiene resultado.");
+    const outcome=await processOfficialGame(code,game,game.result);
+    if(outcome.reason==="invalid-result"){
+      throw new HttpsError("failed-precondition","El resultado no es válido.");
+    }
+    return {ok:true,processed:outcome.processed};
+  }
+
   const tournamentId=cleanText(request.data?.tournamentId,80);
   const matchId=cleanText(request.data?.matchId,30);
   const matchRef=db.ref(`tournaments/${tournamentId}/matches/${matchId}`);
