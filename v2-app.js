@@ -16,6 +16,7 @@ let dismissedReadyInviteKey="";
 const readyExpiryTimers=new Map();
 const readyExpiryRequests=new Set();
 const tournamentExpansionOverrides=new Map();
+let adminSnapshotData=null;
 
 async function openTournamentRoomOnce(code){
   if(!code) return;
@@ -254,12 +255,14 @@ function injectUI(){
       <button class="dashboard-tab" data-panel="profilePanel">PERFIL</button>
       <button class="dashboard-tab" data-panel="historyPanel">HISTORIAL</button>
       <button class="dashboard-tab" data-panel="tournamentsPanel">TORNEOS</button>
+      <button id="adminPanelTab" class="dashboard-tab screen-hidden" data-panel="adminPanel">ADMIN</button>
     </div>`;
   card.appendChild(play);
   for(const [id,title,subtitle] of [
     ["profilePanel","Mi perfil","Tus números se actualizan cuando termina cada partido."],
     ["historyPanel","Historial","Resultados guardados y enfrentamientos entre jugadores."],
-    ["tournamentsPanel","Torneos de 4","Creá un torneo o sumate hasta completar dos semifinales."]
+    ["tournamentsPanel","Torneos de 4","Creá un torneo o sumate hasta completar dos semifinales."],
+    ["adminPanel","Administración","Usuarios, copas, estadísticas, torneos y partidos bloqueados."]
   ]){
     const panel=document.createElement("div"); panel.id=id; panel.className="account-panel";
     panel.innerHTML=`<h2 class="panel-title">${title}</h2><p class="panel-subtitle">${subtitle}</p><div id="${id}Content"></div>`;
@@ -282,11 +285,15 @@ async function claimUsername(user,value){
 function switchPanel(id){
   document.querySelectorAll(".account-panel").forEach(x=>x.classList.toggle("active",x.id===id));
   document.querySelectorAll(".dashboard-tab").forEach(x=>x.classList.toggle("active",x.dataset.panel===id));
+  if(id==="adminPanel") loadAdminPanel();
 }
 function statsOf(data){ return {played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,tournamentsWon:0,...(data||{})}; }
 function renderProfile(userData={}){
   const p=userData.profile||profile||{}, s=statsOf(userData.stats);
   profile=p;
+  const isAdmin=p.usernameKey==="pinar93";
+  el("adminPanelTab")?.classList.toggle("screen-hidden",!isAdmin);
+  if(!isAdmin && el("adminPanel")?.classList.contains("active")) switchPanel("playPanel");
   if(el("currentUsername")) el("currentUsername").textContent=p.username||"Jugador";
   if(el("quickRecord")) el("quickRecord").textContent=`${s.played} PJ · ${s.won} PG`;
   const avg=s.played?(s.goalsFor/s.played).toFixed(1):"0.0";
@@ -339,6 +346,90 @@ function renderHistory(history,stats={}){
       </div>
     </div>`).join("")+"</div>";
 }
+async function adminRequest(action,data={}){
+  if(!functions) throw new Error("Firebase todavía no está disponible.");
+  const result=await httpsCallable(functions,"openTournamentMatch")({action,...data});
+  return result.data;
+}
+function renderAdminPanel(data){
+  adminSnapshotData=data;
+  const node=el("adminPanelContent"); if(!node) return;
+  const users=data?.users||[], tournaments=data?.tournaments||[];
+  node.innerHTML=`
+    <div class="admin-toolbar">
+      <input id="adminUserSearch" class="auth-input" placeholder="Buscar usuario">
+      <button class="small-action" data-admin-refresh>ACTUALIZAR</button>
+    </div>
+    <div id="adminMessage" class="auth-message"></div>
+    <h3 class="admin-section-title">USUARIOS (${users.length})</h3>
+    <div class="admin-user-list">${users.map(user=>`
+      <article class="admin-card" data-admin-user-card data-search="${esc(user.username.toLowerCase())}">
+        <div class="admin-card-head"><strong>${esc(user.username)}</strong><span>🏆 ${user.stats.tournamentsWon}</span></div>
+        <div class="admin-record">${user.stats.played} PJ · ${user.stats.won} G · ${user.stats.drawn} E · ${user.stats.lost} P</div>
+        <div class="admin-actions">
+          <button class="small-action" data-admin-cups="-1" data-uid="${esc(user.uid)}" data-current="${user.stats.tournamentsWon}">− COPA</button>
+          <button class="small-action green" data-admin-cups="1" data-uid="${esc(user.uid)}" data-current="${user.stats.tournamentsWon}">+ COPA</button>
+          <button class="small-action" data-admin-reset-stats="${esc(user.uid)}">REINICIAR ESTADÍSTICAS</button>
+          ${user.username.toLowerCase()!=="pinar93"?`<button class="small-action danger" data-admin-delete-user="${esc(user.uid)}" data-name="${esc(user.username)}">ELIMINAR USUARIO</button>`:""}
+        </div>
+      </article>`).join("")||'<div class="empty-state">No hay usuarios.</div>'}</div>
+    <h3 class="admin-section-title">TORNEOS (${tournaments.length})</h3>
+    <div class="admin-tournament-list">${tournaments.map(tournament=>`
+      <article class="admin-card">
+        <div class="admin-card-head"><strong>${esc(tournament.name)}</strong><span>${esc(tournament.status)} · ${tournament.participants}/4</span></div>
+        <div class="admin-match-list">${tournament.matches.map(match=>`
+          <div class="admin-match-row">
+            <span>${esc(match.label)}: ${esc(match.playerAName)} vs ${esc(match.playerBName)} · ${esc(match.status)}</span>
+            ${!match.winnerUid&&["ready","playing"].includes(match.status)?`<button class="small-action" data-admin-reset-match data-tournament="${esc(tournament.id)}" data-match="${esc(match.matchId)}">REINICIAR</button>`:""}
+          </div>`).join("")}</div>
+        <button class="small-action danger" data-admin-delete-tournament="${esc(tournament.id)}" data-name="${esc(tournament.name)}">ELIMINAR TORNEO</button>
+      </article>`).join("")||'<div class="empty-state">No hay torneos.</div>'}</div>`;
+}
+async function loadAdminPanel(){
+  const node=el("adminPanelContent"); if(!node || profile?.usernameKey!=="pinar93") return;
+  node.innerHTML='<div class="empty-state">Cargando administración...</div>';
+  try{ renderAdminPanel(await adminRequest("adminSnapshot")); }
+  catch(error){node.innerHTML=`<div class="auth-message error">${esc(error?.message||"No se pudo cargar el panel.")}</div>`;}
+}
+async function handleAdminClick(event){
+  const refresh=event.target.closest("[data-admin-refresh]");
+  const cups=event.target.closest("[data-admin-cups]");
+  const resetStats=event.target.closest("[data-admin-reset-stats]");
+  const deleteUser=event.target.closest("[data-admin-delete-user]");
+  const deleteTournament=event.target.closest("[data-admin-delete-tournament]");
+  const resetMatch=event.target.closest("[data-admin-reset-match]");
+  if(!refresh&&!cups&&!resetStats&&!deleteUser&&!deleteTournament&&!resetMatch) return;
+  const message=el("adminMessage");
+  try{
+    if(refresh) return loadAdminPanel();
+    if(cups){
+      const value=Math.max(0,Number(cups.dataset.current||0)+Number(cups.dataset.adminCups));
+      await adminRequest("adminSetCups",{targetUid:cups.dataset.uid,cups:value});
+    }
+    if(resetStats){
+      if(!confirm("¿Reiniciar todos los partidos y estadísticas de este usuario? Las copas se conservarán.")) return;
+      await adminRequest("adminResetStats",{targetUid:resetStats.dataset.adminResetStats});
+    }
+    if(deleteUser){
+      if(!confirm(`¿Eliminar definitivamente al usuario “${deleteUser.dataset.name}”? Esta acción no se puede deshacer.`)) return;
+      await adminRequest("adminDeleteUser",{targetUid:deleteUser.dataset.adminDeleteUser});
+    }
+    if(deleteTournament){
+      if(!confirm(`¿Eliminar definitivamente el torneo “${deleteTournament.dataset.name}”?`)) return;
+      await adminRequest("adminDeleteTournament",{tournamentId:deleteTournament.dataset.adminDeleteTournament});
+    }
+    if(resetMatch){
+      if(!confirm("¿Reiniciar este partido? Volverá a quedar pendiente y se eliminará la sala actual.")) return;
+      await adminRequest("adminResetMatch",{tournamentId:resetMatch.dataset.tournament,matchId:resetMatch.dataset.match});
+    }
+    if(message) message.textContent="Cambio guardado.";
+    await loadAdminPanel();
+  }catch(error){
+    if(message){message.textContent=error?.message||"No se pudo completar la acción.";message.className="auth-message error";}
+    else alert(error?.message||"No se pudo completar la acción.");
+  }
+}
+
 function renderTournaments(data={}){
   const node=el("tournamentsPanelContent"); if(!node) return;
   const list=Object.entries(data).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
@@ -455,6 +546,12 @@ function bindUI(){
   el("finishProfileForm").onsubmit=async e=>{e.preventDefault();try{setMessage("Guardando nombre...");await claimUsername(auth.currentUser,el("finishUsername").value);await finishLogin(auth.currentUser);}catch(err){setMessage(authError(err),true);}};
   el("resetPassword").onclick=async()=>{const email=el("loginEmail").value.trim();if(!email)return setMessage("Escribí tu correo primero.",true);try{await sendPasswordResetEmail(auth,email);setMessage("Te enviamos un correo para cambiar la contraseña.");}catch(err){setMessage(authError(err),true);}};
   el("logoutButton").onclick=()=>signOut(auth);
+  el("adminPanelContent").addEventListener("click",handleAdminClick);
+  el("adminPanelContent").addEventListener("input",event=>{
+    if(event.target.id!=="adminUserSearch") return;
+    const term=event.target.value.trim().toLowerCase();
+    document.querySelectorAll("[data-admin-user-card]").forEach(card=>card.classList.toggle("screen-hidden",!card.dataset.search.includes(term)));
+  });
   el("tournamentsPanelContent").addEventListener("click",async e=>{
     const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), leave=e.target.closest("[data-leave-tournament]"), open=e.target.closest("[data-open-tournament]"), cancelReady=e.target.closest("[data-cancel-ready]"), remove=e.target.closest("[data-delete-tournament]"), toggle=e.target.closest("[data-toggle-tournament]");
     const msg=el("tournamentMessage");
