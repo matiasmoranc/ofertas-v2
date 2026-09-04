@@ -215,6 +215,28 @@ exports.openTournamentMatch=onCall(async request=>{
   const initial=(await matchRef.get()).val();
   if(!initial) throw new HttpsError("not-found","No existe ese partido.");
   if(![initial.playerAUid,initial.playerBUid].includes(uid)) throw new HttpsError("permission-denied","No participás de este partido.");
+  if(request.data?.action==="expireReady"){
+    const cutoff=Date.now()-(10*60*1000);
+    const expired=await matchRef.transaction(current=>{
+      if(!current || current.winnerUid || current.status!=="ready") return current;
+      const readyPlayers=current.readyPlayers||{};
+      let changed=false;
+      for(const [playerUid,ready] of Object.entries(readyPlayers)){
+        if(Number(ready?.readyAt||0)<=cutoff){
+          delete readyPlayers[playerUid];
+          changed=true;
+        }
+      }
+      if(!changed) return;
+      current.readyPlayers=Object.keys(readyPlayers).length?readyPlayers:null;
+      current.status="ready";
+      current.startedAt=null;
+      current.roomCode=null;
+      return current;
+    });
+    return {ok:true,expired:expired.committed};
+  }
+
   if(request.data?.action==="cancelReady"){
     // Recupera tanto esperas normales como salas residuales que fueron
     // reservadas pero donde el mercado nunca llegó a comenzar.
@@ -293,8 +315,13 @@ exports.openTournamentMatch=onCall(async request=>{
   const locked=await matchRef.transaction(current=>{
     if(!current || current.winnerUid || !["ready","playing"].includes(current.status)) return;
     current.readyPlayers=current.readyPlayers||{};
+    const now=Date.now();
+    const cutoff=now-(10*60*1000);
+    for(const [playerUid,ready] of Object.entries(current.readyPlayers)){
+      if(Number(ready?.readyAt||0)<=cutoff) delete current.readyPlayers[playerUid];
+    }
     current.readyPlayers[uid]={
-      uid,username:playerProfile.username,readyAt:Date.now()
+      uid,username:playerProfile.username,readyAt:now
     };
     const bothReady=Boolean(
       current.readyPlayers[current.playerAUid] &&
