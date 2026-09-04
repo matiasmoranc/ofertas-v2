@@ -39,6 +39,10 @@ export async function forfeitTournamentMatch(tournamentId,matchId){
   if(!functions || !tournamentId || !matchId) return;
   return httpsCallable(functions,"openTournamentMatch")({tournamentId,matchId,action:"forfeit"});
 }
+export async function syncOfficialGameResult(roomCode){
+  if(!functions || !roomCode) throw new Error("No se pudo identificar la sala.");
+  return httpsCallable(functions,"openTournamentMatch")({roomCode,action:"syncResult"});
+}
 
 function el(id){ return document.getElementById(id); }
 function finishBootLoading(){
