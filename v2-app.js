@@ -119,12 +119,12 @@ function syncTournamentReadiness(data={}){
               readyExpiryTimers.delete(expiryKey);
             }
           };
-          readyExpiryTimers.set(expiryKey,setTimeout(expire,Math.max(0,readyAt+(10*60*1000)-now)));
+          readyExpiryTimers.set(expiryKey,setTimeout(expire,10*60*1000));
         }
       }
       const opponentUid=match.playerAUid===currentUid?match.playerBUid:match.playerAUid;
       const opponentReady=readyPlayers[opponentUid];
-      if(!readyPlayers[currentUid] && opponentReady && Number(opponentReady.readyAt||0)+(10*60*1000)>now && !invitation){
+      if(!readyPlayers[currentUid] && opponentReady && !invitation){
         invitation={
           tournamentId,matchId,opponentUid,
           opponentName:opponentReady.username||(match.playerAUid===opponentUid?match.playerAName:match.playerBName)||"Tu rival",
