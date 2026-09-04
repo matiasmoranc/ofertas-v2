@@ -239,7 +239,7 @@ function bracketMatch(tournamentId,matchId,match){
     <div class="bracket-player-row ${m.winnerUid===m.playerAUid?"winner":""}">${bracketPlayer(m.playerAName)}<strong>${hasScore?m.score.A:"–"}</strong></div>
     <div class="bracket-player-row ${m.winnerUid===m.playerBUid?"winner":""}">${bracketPlayer(m.playerBName)}<strong>${hasScore?m.score.B:"–"}</strong></div>
     ${readyNotice}
-    ${canOpen||canReenter?`<button class="small-action bracket-play" data-open-tournament="${esc(tournamentId)}" data-match="${esc(matchId)}">${buttonText}</button>`:mineReady&&m.status==="ready"?'<button class="small-action bracket-play" disabled>ESPERANDO AL RIVAL…</button>':""}
+    ${canOpen||canReenter?`<button class="small-action bracket-play" data-open-tournament="${esc(tournamentId)}" data-match="${esc(matchId)}">${buttonText}</button>`:mineReady&&m.status==="ready"?`<button class="small-action danger" data-cancel-ready="${esc(tournamentId)}" data-match="${esc(matchId)}">CANCELAR ESPERA</button>`:""}
   </div>`;
 }
 function tournamentBracket(id,t){
@@ -311,12 +311,23 @@ function bindUI(){
   el("resetPassword").onclick=async()=>{const email=el("loginEmail").value.trim();if(!email)return setMessage("Escribí tu correo primero.",true);try{await sendPasswordResetEmail(auth,email);setMessage("Te enviamos un correo para cambiar la contraseña.");}catch(err){setMessage(authError(err),true);}};
   el("logoutButton").onclick=()=>signOut(auth);
   el("tournamentsPanelContent").addEventListener("click",async e=>{
-    const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), open=e.target.closest("[data-open-tournament]"), remove=e.target.closest("[data-delete-tournament]");
+    const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), open=e.target.closest("[data-open-tournament]"), cancelReady=e.target.closest("[data-cancel-ready]"), remove=e.target.closest("[data-delete-tournament]");
     const msg=el("tournamentMessage");
     if(msg) msg.className="auth-message";
     try{
       if(create){const name=el("tournamentName").value.trim();if(name.length<3)throw new Error("Escribí un nombre para el torneo.");msg.textContent="Creando torneo...";await httpsCallable(functions,"createTournament")({name});}
       if(join){msg.textContent="Uniéndote...";await httpsCallable(functions,"joinTournament")({tournamentId:join.dataset.joinTournament});}
+      if(cancelReady){
+        if(!confirm("¿Cancelar la espera? Los dos jugadores dejarán de figurar como prontos.")) return;
+        msg.textContent="Cancelando espera...";
+        await httpsCallable(functions,"openTournamentMatch")({
+          tournamentId:cancelReady.dataset.cancelReady,
+          matchId:cancelReady.dataset.match,
+          action:"cancelReady"
+        });
+        tournamentRoomOpening="";
+        tournamentRoomPromise=null;
+      }
       if(open){
         msg.textContent="Marcándote como pronto...";
         const result=await httpsCallable(functions,"openTournamentMatch")({tournamentId:open.dataset.openTournament,matchId:open.dataset.match});
