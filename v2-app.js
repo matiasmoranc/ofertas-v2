@@ -344,7 +344,7 @@ export async function startV2App(config,handlers={}){
         await finishLogin(user);
         // Repara resultados válidos que hayan quedado sin procesar por una
         // interrupción del trigger. El servidor evita contabilizarlos dos veces.
-        httpsCallable(functions,"syncMyResults")({}).catch(error=>
+        httpsCallable(functions,"openTournamentMatch")({action:"syncResults"}).catch(error=>
           console.warn("No se pudieron sincronizar resultados pendientes:",error)
         );
       }catch(err){showGate("login");setMessage(authError(err),true);}
