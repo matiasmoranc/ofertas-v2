@@ -267,6 +267,23 @@ exports.openTournamentMatch=onCall(async request=>{
     return {ok:true,expired:expired.committed};
   }
 
+  if(request.data?.action==="entered"){
+    const code=cleanText(request.data?.roomCode,12);
+    if(initial.status!=="playing" || !initial.roomCode || code!==initial.roomCode){
+      throw new HttpsError("failed-precondition","La sala ya no está disponible.");
+    }
+    const gameRef=db.ref(`games/${code}`);
+    const game=(await gameRef.get()).val();
+    if(!game || game.result || game.status!=="playing"){
+      return {ok:true,alreadyFinished:true};
+    }
+    if(![game.playerAUid,game.playerBUid].includes(uid)){
+      throw new HttpsError("permission-denied","No participás de esta partida.");
+    }
+    await gameRef.child(`enteredPlayers/${uid}`).set({enteredAt:Date.now()});
+    return {ok:true};
+  }
+
   if(request.data?.action==="cancelReady"){
     // Recupera tanto esperas normales como salas residuales que fueron
     // reservadas pero donde el mercado nunca llegó a comenzar.
@@ -311,16 +328,35 @@ exports.openTournamentMatch=onCall(async request=>{
 
   if(request.data?.action==="forfeit"){
     if(initial.status!=="playing" || !initial.roomCode){
-      throw new HttpsError("failed-precondition","El partido todavía no comenzó o ya finalizó.");
+      return {ok:true,alreadyFinished:true};
     }
-    const gameRef=db.ref(`games/${initial.roomCode}`);
-    const forfeited=await gameRef.transaction(game=>{
-      if(!game || game.result || game.status!=="playing") return;
-      const loser=game.playerAUid===uid?"A":"B";
+    const code=initial.roomCode;
+    const gameRef=db.ref(`games/${code}`);
+    const game=(await gameRef.get()).val();
+    if(!game || game.result || game.status!=="playing"){
+      return {ok:true,alreadyFinished:true};
+    }
+    const opponentUid=game.playerAUid===uid?game.playerBUid:game.playerAUid;
+    if(!game.enteredPlayers?.[opponentUid]){
+      await matchRef.update({
+        readyPlayers:null,
+        startedAt:null,
+        roomCode:null,
+        status:"ready"
+      });
+      await Promise.all([
+        gameRef.remove(),
+        db.ref(`matches/${code}`).remove()
+      ]);
+      return {ok:true,pending:true};
+    }
+    const forfeited=await gameRef.transaction(current=>{
+      if(!current || current.result || current.status!=="playing") return;
+      const loser=current.playerAUid===uid?"A":"B";
       const winner=loser==="A"?"B":"A";
-      game.status="finished";
-      game.message=`🏳️ ${loser==="A"?(game.playerAName||"Equipo Azul"):(game.playerBName||"Equipo Rojo")} abandonó. Victoria 3–0.`;
-      game.result={
+      current.status="finished";
+      current.message=`🏳️ ${loser==="A"?(current.playerAName||"Equipo Azul"):(current.playerBName||"Equipo Rojo")} abandonó. Victoria 3–0.`;
+      current.result={
         goalsA:winner==="A"?3:0,
         goalsB:winner==="B"?3:0,
         winner,
@@ -328,12 +364,9 @@ exports.openTournamentMatch=onCall(async request=>{
         forfeitedBy:uid,
         fromMiniMatch:false
       };
-      return game;
+      return current;
     });
-    if(!forfeited.committed){
-      throw new HttpsError("failed-precondition","El partido ya había finalizado.");
-    }
-    return {ok:true};
+    return {ok:true,alreadyFinished:!forfeited.committed};
   }
 
   const playerProfile=await profileFor(uid);
