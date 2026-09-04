@@ -171,3 +171,87 @@ button,a,input,select,textarea,[role="button"]{touch-action:manipulation}
   .match-emoji-controls{right:12px;bottom:calc(14px + env(safe-area-inset-bottom))}
   .match-emoji-menu button{width:39px;height:39px;font-size:21px}
 }
+
+
+/* Reconexión de jugadores */
+.reconnect-banner{
+  position:fixed;
+  top:calc(14px + env(safe-area-inset-top));
+  left:50%;
+  z-index:140;
+  width:min(92vw,460px);
+  padding:14px 58px 14px 16px;
+  border:1px solid rgba(255,193,7,.62);
+  border-radius:16px;
+  background:rgba(30,24,6,.97);
+  color:#fff;
+  box-shadow:0 12px 34px rgba(0,0,0,.52);
+  transform:translateX(-50%);
+}
+.reconnect-banner strong,.reconnect-banner span{display:block}
+.reconnect-banner strong{margin-bottom:4px;color:#ffd45b;font-size:15px}
+.reconnect-banner span{color:#f3ead0;font-size:13px;line-height:1.35}
+.reconnect-banner b{
+  position:absolute;
+  top:50%;
+  right:14px;
+  color:#baff42;
+  font-size:18px;
+  transform:translateY(-50%);
+}
+
+/* Diálogos propios del juego */
+body.dialog-open{overflow:hidden}
+.game-dialog-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:500;
+  display:grid;
+  place-items:center;
+  padding:20px;
+  background:rgba(0,0,0,.72);
+  backdrop-filter:blur(5px);
+}
+.game-dialog-card{
+  width:min(100%,430px);
+  padding:22px;
+  border:1px solid rgba(186,255,66,.28);
+  border-radius:22px;
+  background:#102219;
+  color:#fff;
+  box-shadow:0 22px 65px rgba(0,0,0,.68);
+}
+.game-dialog-card h2{margin:0 0 10px;font-size:22px}
+.game-dialog-card p{
+  margin:0;
+  color:#c8d1cb;
+  font-size:15px;
+  line-height:1.5;
+  white-space:pre-line;
+}
+.game-dialog-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:10px;
+  margin-top:22px;
+}
+.game-dialog-actions button{
+  min-height:44px;
+  padding:10px 18px;
+  border:1px solid rgba(255,255,255,.14);
+  border-radius:13px;
+  font-weight:800;
+  cursor:pointer;
+}
+.game-dialog-cancel{background:rgba(255,255,255,.08);color:#fff}
+.game-dialog-confirm{background:#baff42;color:#07100b}
+.game-dialog-confirm.danger{
+  border-color:rgba(255,111,111,.6);
+  background:#542323;
+  color:#ffabab;
+}
+@media(max-width:520px){
+  .game-dialog-actions{flex-direction:column-reverse}
+  .game-dialog-actions button{width:100%}
+  .reconnect-banner{top:calc(8px + env(safe-area-inset-top))}
+}
