@@ -2466,6 +2466,7 @@ let spectatorDisconnectHandle = null;
 let lastSpectatorCount = null;
 let spectatorToastTimer = null;
 let lastEmojiEventId = "";
+let emojiEventInitialized = false;
 let emojiReactionTimer = null;
 let emojiCooldownUntil = 0;
 let emojiCooldownTimer = null;
@@ -4572,6 +4573,11 @@ function showEmojiReaction(event){
 
 function syncEmojiExperience(state){
   updateEmojiControls();
+  if(!emojiEventInitialized){
+    emojiEventInitialized=true;
+    lastEmojiEventId=state?.emojiEvent?.id || "";
+    return;
+  }
   showEmojiReaction(state?.emojiEvent);
 }
 
@@ -4710,6 +4716,7 @@ function leaveRoom(clearUrl=true, closeActiveMatch=false){
     emojiCooldownTimer=null;
   }
   lastEmojiEventId="";
+  emojiEventInitialized=false;
   emojiCooldownUntil=0;
 
   if(db && oldRoomCode && closeActiveMatch && wasActivePlayer){
