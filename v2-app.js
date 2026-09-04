@@ -339,7 +339,16 @@ export async function startV2App(config,handlers={}){
   const remembered=localStorage.getItem("ofertasV2LastLogin");
   if(remembered && el("loginEmail")) el("loginEmail").value=remembered;
   onAuthStateChanged(auth,async user=>{
-    if(user){try{await finishLogin(user);}catch(err){showGate("login");setMessage(authError(err),true);}}
+    if(user){
+      try{
+        await finishLogin(user);
+        // Repara resultados válidos que hayan quedado sin procesar por una
+        // interrupción del trigger. El servidor evita contabilizarlos dos veces.
+        httpsCallable(functions,"syncMyResults")({}).catch(error=>
+          console.warn("No se pudieron sincronizar resultados pendientes:",error)
+        );
+      }catch(err){showGate("login");setMessage(authError(err),true);}
+    }
     else{profile=null;if(stopUser)stopUser();if(stopTournaments)stopTournaments();showGate("login");callbacks.onSignedOut?.();}
   });
 }
