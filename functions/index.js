@@ -402,6 +402,49 @@ exports.openTournamentMatch=onCall(async request=>{
     return {ok:true,processed};
   }
 
+  if(request.data?.action==="forfeitOpenMatch"){
+    const code=cleanText(request.data?.roomCode,12);
+    if(!code) throw new HttpsError("invalid-argument","Falta la sala.");
+    const gameRef=db.ref(`games/${code}`);
+    const initial=(await gameRef.get()).val();
+    if(!initial) throw new HttpsError("not-found","La partida ya no existe.");
+    if(initial.tournamentId || initial.tournamentMatchId){
+      throw new HttpsError("failed-precondition","Este abandono pertenece a un torneo.");
+    }
+    if(![initial.playerAUid,initial.playerBUid].includes(uid)){
+      throw new HttpsError("permission-denied","No participás de esta partida.");
+    }
+    if(initial.result){
+      await processOfficialGame(code,initial,initial.result);
+      await db.ref(`openRooms/${code}`).remove();
+      return {ok:true,alreadyFinished:true};
+    }
+    if(initial.status!=="playing" || !initial.playerAUid || !initial.playerBUid){
+      throw new HttpsError("failed-precondition","El partido todavía no comenzó.");
+    }
+    const forfeited=await gameRef.transaction(current=>{
+      if(!current || current.result || current.status!=="playing") return;
+      if(![current.playerAUid,current.playerBUid].includes(uid)) return;
+      const loser=current.playerAUid===uid?"A":"B";
+      const winner=loser==="A"?"B":"A";
+      current.status="finished";
+      current.message=`🏳️ ${loser==="A"?(current.playerAName||"Equipo Azul"):(current.playerBName||"Equipo Rojo")} abandonó. Victoria 3–0.`;
+      current.result={
+        goalsA:winner==="A"?3:0,
+        goalsB:winner==="B"?3:0,
+        winner,
+        forfeit:true,
+        forfeitedBy:uid,
+        fromMiniMatch:false
+      };
+      return current;
+    });
+    const finalGame=forfeited.snapshot.val();
+    if(finalGame?.result) await processOfficialGame(code,finalGame,finalGame.result);
+    await db.ref(`openRooms/${code}`).remove();
+    return {ok:true,alreadyFinished:!forfeited.committed};
+  }
+
   if(request.data?.action==="syncResult"){
     const code=cleanText(request.data?.roomCode,12);
     if(!code) throw new HttpsError("invalid-argument","Falta la sala.");
