@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./v2.css?v=20260904-10">
+<link rel="stylesheet" href="./v2.css?v=20260904-11">
 <title>Mercado Élite 5 - Multiplayer</title>
 <style>
 *{
@@ -4557,7 +4557,6 @@ function showEmojiReaction(event){
   if(!event?.id || event.id===lastEmojiEventId) return;
   const overlay=$("emojiReactionOverlay");
   lastEmojiEventId=event.id;
-  if(event.senderUid===uid && !isSpectator) return;
   if(!overlay) return;
   overlay.textContent=event.emoji;
   overlay.classList.remove("show");
