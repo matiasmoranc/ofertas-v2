@@ -96,3 +96,7 @@ body.auth-loading .boot-loader{display:flex}
 .admin-inner-title{margin:13px 0 7px;color:#91a39a;font-size:9px;letter-spacing:1.2px}
 .admin-participant-list{display:grid;gap:6px}
 .admin-participant-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border-radius:8px;background:rgba(0,0,0,.2);font-size:11px}
+
+/* Evita el zoom accidental por doble toque en dispositivos móviles */
+html,body{touch-action:pan-y}
+button,a,input,select,textarea,[role="button"]{touch-action:manipulation}
