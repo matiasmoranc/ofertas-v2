@@ -294,6 +294,7 @@ function bindUI(){
   el("tournamentsPanelContent").addEventListener("click",async e=>{
     const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), open=e.target.closest("[data-open-tournament]"), remove=e.target.closest("[data-delete-tournament]");
     const msg=el("tournamentMessage");
+    if(msg) msg.className="auth-message";
     try{
       if(create){const name=el("tournamentName").value.trim();if(name.length<3)throw new Error("Escribí un nombre para el torneo.");msg.textContent="Creando torneo...";await httpsCallable(functions,"createTournament")({name});}
       if(join){msg.textContent="Uniéndote...";await httpsCallable(functions,"joinTournament")({tournamentId:join.dataset.joinTournament});}
