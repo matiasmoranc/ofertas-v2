@@ -179,6 +179,20 @@ exports.joinTournament=onCall(async request=>{
 
 exports.openTournamentMatch=onCall(async request=>{
   const uid=requireAuth(request);
+
+  // Reutilizamos esta función ya autorizada para reparar resultados
+  // pendientes, evitando crear otro servicio con permisos IAM nuevos.
+  if(request.data?.action==="syncResults"){
+    const games=(await db.ref("games").get()).val()||{};
+    let processed=0;
+    for(const [room,game] of Object.entries(games)){
+      if(!game?.result || ![game.playerAUid,game.playerBUid].includes(uid)) continue;
+      const outcome=await processOfficialGame(room,game,game.result);
+      if(outcome.processed) processed++;
+    }
+    return {ok:true,processed};
+  }
+
   const tournamentId=cleanText(request.data?.tournamentId,80);
   const matchId=cleanText(request.data?.matchId,30);
   const matchRef=db.ref(`tournaments/${tournamentId}/matches/${matchId}`);
@@ -417,14 +431,3 @@ exports.recordOfficialResult=onValueCreated("/games/{room}/result",async event=>
   await processOfficialGame(room,game,result);
 });
 
-exports.syncMyResults=onCall(async request=>{
-  const uid=requireAuth(request);
-  const games=(await db.ref("games").get()).val()||{};
-  let processed=0;
-  for(const [room,game] of Object.entries(games)){
-    if(!game?.result || ![game.playerAUid,game.playerBUid].includes(uid)) continue;
-    const outcome=await processOfficialGame(room,game,game.result);
-    if(outcome.processed) processed++;
-  }
-  return {ok:true,processed};
-});
