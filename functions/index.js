@@ -309,44 +309,49 @@ exports.openTournamentMatch=onCall(async request=>{
   const playerProfile=await profileFor(uid);
   const proposedCode=roomCode();
 
-  // Marcar al jugador como pronto y decidir el inicio dentro de una única
-  // transacción. Así dos clics simultáneos no pueden dejar ambos listos
-  // sin crear la sala.
-  const locked=await matchRef.transaction(current=>{
-    if(!current || current.winnerUid || !["ready","playing"].includes(current.status)) return;
-    current.readyPlayers=current.readyPlayers||{};
-    const now=Date.now();
-    const cutoff=now-(10*60*1000);
-    for(const [playerUid,ready] of Object.entries(current.readyPlayers)){
-      if(Number(ready?.readyAt||0)<=cutoff) delete current.readyPlayers[playerUid];
-    }
-    current.readyPlayers[uid]={
-      uid,username:playerProfile.username,readyAt:now
-    };
-    const bothReady=Boolean(
-      current.readyPlayers[current.playerAUid] &&
-      current.readyPlayers[current.playerBUid]
-    );
-    if(!bothReady){
-      current.status="ready";
-      return current;
-    }
-    if(!current.roomCode) current.roomCode=proposedCode;
-    current.status="playing";
-    current.startedAt=current.startedAt||Date.now();
-    return current;
-  });
+  // Guardar primero el estado del jugador de forma directa. La transacción
+  // anterior podía abortarse y luego responder "esperando" aunque no hubiera
+  // persistido el listo.
+  const now=Date.now();
+  const cutoff=now-(10*60*1000);
+  const latest=(await matchRef.get()).val();
+  if(!latest || latest.winnerUid || !["ready","playing"].includes(latest.status)){
+    throw new HttpsError("failed-precondition","Ese partido ya no está disponible.");
+  }
+  const readyUpdate={};
+  for(const [playerUid,ready] of Object.entries(latest.readyPlayers||{})){
+    if(Number(ready?.readyAt||0)<=cutoff) readyUpdate[`readyPlayers/${playerUid}`]=null;
+  }
+  readyUpdate[`readyPlayers/${uid}`]={
+    uid,username:playerProfile.username,readyAt:now
+  };
+  await matchRef.update(readyUpdate);
 
-  let match=locked.committed?locked.snapshot.val():(await matchRef.get()).val();
+  let match=(await matchRef.get()).val();
   if(!match || match.winnerUid){
     throw new HttpsError("failed-precondition","Ese partido ya no está disponible.");
   }
-  if(!match.roomCode){
+  const bothReady=Boolean(
+    match.readyPlayers?.[match.playerAUid] &&
+    match.readyPlayers?.[match.playerBUid]
+  );
+  if(!bothReady){
     const opponentName=match.playerAUid===uid?match.playerBName:match.playerAName;
     return {waiting:true,message:`Estás pronto. Esperando que ${opponentName||"tu rival"} entre al partido.`};
   }
 
-  const code=match.roomCode;
+  // Solo la reserva del código necesita transacción: si ambos jugadores llegan
+  // al mismo tiempo, los dos reciben exactamente la misma sala.
+  const codeTx=await matchRef.child("roomCode").transaction(current=>current||proposedCode);
+  const reservedCode=codeTx.snapshot.val();
+  if(!reservedCode) throw new HttpsError("internal","No se pudo reservar la sala.");
+  await matchRef.update({
+    status:"playing",
+    startedAt:match.startedAt||Date.now()
+  });
+  match=(await matchRef.get()).val();
+
+  const code=reservedCode;
   const gameRef=db.ref(`games/${code}`);
   const gameTx=await gameRef.transaction(current=>current||baseTournamentGame(
     code,
