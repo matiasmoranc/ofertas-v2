@@ -215,27 +215,39 @@ exports.openTournamentMatch=onCall(async request=>{
   }
 
   const playerProfile=await profileFor(uid);
-  const proposedCode=roomCode();
-  const locked=await matchRef.transaction(match=>{
-    if(!match || match.winnerUid || !["ready","playing"].includes(match.status)) return;
-    match.readyPlayers=match.readyPlayers||{};
-    match.readyPlayers[uid]={uid,username:playerProfile.username,readyAt:Date.now()};
-    const bothReady=Boolean(match.readyPlayers[match.playerAUid] && match.readyPlayers[match.playerBUid]);
-    if(bothReady){
-      if(!match.roomCode) match.roomCode=proposedCode;
-      match.status="playing";
-      match.startedAt=match.startedAt||Date.now();
-    }else{
-      match.status="ready";
-      match.roomCode=null;
-    }
-    return match;
+  await matchRef.child(`readyPlayers/${uid}`).set({
+    uid,username:playerProfile.username,readyAt:Date.now()
   });
-  if(!locked.committed) throw new HttpsError("aborted","El cruce cambió. Actualizá e intentá nuevamente.");
-  const match=locked.snapshot.val();
-  if(!match.roomCode){
+
+  let match=(await matchRef.get()).val();
+  if(!match || match.winnerUid || !["ready","playing"].includes(match.status)){
+    throw new HttpsError("failed-precondition","Ese partido ya no está disponible.");
+  }
+
+  const bothReady=Boolean(match.readyPlayers?.[match.playerAUid] && match.readyPlayers?.[match.playerBUid]);
+  if(!bothReady){
+    await matchRef.child("status").set("ready");
     const opponentName=match.playerAUid===uid?match.playerBName:match.playerAName;
     return {waiting:true,message:`Estás pronto. Esperando que ${opponentName||"tu rival"} entre al partido.`};
+  }
+
+  const proposedCode=roomCode();
+  const locked=await matchRef.transaction(current=>{
+    if(!current || current.winnerUid || !["ready","playing"].includes(current.status)) return;
+    const ready=Boolean(current.readyPlayers?.[current.playerAUid] && current.readyPlayers?.[current.playerBUid]);
+    if(!ready) return;
+    if(!current.roomCode) current.roomCode=proposedCode;
+    current.status="playing";
+    current.startedAt=current.startedAt||Date.now();
+    return current;
+  });
+  if(locked.committed){
+    match=locked.snapshot.val();
+  }else{
+    match=(await matchRef.get()).val();
+    if(!match?.roomCode || match.status!=="playing"){
+      throw new HttpsError("aborted","No se pudo preparar el partido. Intentá nuevamente.");
+    }
   }
 
   const code=match.roomCode;
