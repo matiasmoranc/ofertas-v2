@@ -166,6 +166,13 @@ export async function forfeitTournamentMatch(tournamentId,matchId){
   if(!functions || !tournamentId || !matchId) return;
   return httpsCallable(functions,"openTournamentMatch")({tournamentId,matchId,action:"forfeit"});
 }
+export async function forfeitOpenMatch(roomCode){
+  if(!functions || !roomCode) throw new Error("No se pudo identificar la sala.");
+  const result=await httpsCallable(functions,"openTournamentMatch")({
+    action:"forfeitOpenMatch",roomCode
+  });
+  return result.data;
+}
 export async function syncOfficialGameResult(roomCode){
   if(!functions || !roomCode) throw new Error("No se pudo identificar la sala.");
   return httpsCallable(functions,"openTournamentMatch")({roomCode,action:"syncResult"});
