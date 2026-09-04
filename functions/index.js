@@ -187,6 +187,20 @@ exports.openTournamentMatch=onCall(async request=>{
   if(![initial.playerAUid,initial.playerBUid].includes(uid)) throw new HttpsError("permission-denied","No participás de este partido.");
   if(!["ready","playing"].includes(initial.status) || initial.winnerUid) throw new HttpsError("failed-precondition","Ese partido no está disponible.");
 
+  if(request.data?.action==="cancelReady"){
+    if(initial.status!=="ready" || initial.roomCode){
+      throw new HttpsError("failed-precondition","La espera ya terminó y no se puede cancelar.");
+    }
+    const reset=await matchRef.transaction(match=>{
+      if(!match || match.winnerUid || match.status!=="ready" || match.roomCode) return;
+      delete match.readyPlayers;
+      match.status="ready";
+      return match;
+    });
+    if(!reset.committed) throw new HttpsError("aborted","La espera cambió. Actualizá e intentá nuevamente.");
+    return {ok:true};
+  }
+
   if(request.data?.action==="forfeit"){
     if(initial.status!=="playing" || !initial.roomCode){
       throw new HttpsError("failed-precondition","El partido todavía no comenzó o ya finalizó.");
