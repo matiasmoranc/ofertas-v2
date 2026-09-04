@@ -202,15 +202,15 @@ exports.openTournamentMatch=onCall(async request=>{
     if(staleCode && !untouchedGame){
       throw new HttpsError("failed-precondition","El partido ya comenzó y no se puede cancelar la espera.");
     }
-    const reset=await matchRef.transaction(match=>{
-      if(!match || match.winnerUid) return;
-      delete match.readyPlayers;
-      delete match.startedAt;
-      delete match.roomCode;
-      match.status="ready";
-      return match;
+    // El jugador y su pertenencia al cruce ya fueron validados contra
+    // el estado actual. Una actualización directa evita falsos abortos
+    // de la transacción al limpiar campos residuales.
+    await matchRef.update({
+      readyPlayers:null,
+      startedAt:null,
+      roomCode:null,
+      status:"ready"
     });
-    if(!reset.committed) throw new HttpsError("aborted","La espera cambió. Actualizá e intentá nuevamente.");
     if(staleCode){
       await Promise.all([
         db.ref(`games/${staleCode}`).remove(),
