@@ -2198,7 +2198,7 @@ position: fixed;
 
 <script type="module">
 import { firebaseConfig } from "./firebase-config.js";
-import { startV2App, getV2Profile } from "./v2-app.js?v=20260903-3";
+import { startV2App, getV2Profile, forfeitTournamentMatch } from "./v2-app.js?v=20260904-1";
 import { getDatabase, ref, get, update, onValue, runTransaction, remove, set, onDisconnect } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
 
 /* =================================================
@@ -4618,7 +4618,27 @@ rootMiniButtons().forEach(button=>{
 });
 $("revengeButton").addEventListener("click",resetGame);
 $("miniBriefingButton")?.addEventListener("click",dismissMiniBriefing);
-$("leaveRoomButton").addEventListener("click",()=>leaveRoom(true,true));
+$("leaveRoomButton").addEventListener("click",async()=>{
+  const tournamentId=gameState?.tournamentId;
+  const tournamentMatchId=gameState?.tournamentMatchId;
+  if(tournamentId && tournamentMatchId && gameState?.status==="playing" && !gameState?.result && !isSpectator){
+    if(!confirm("¿Salir del partido?\n\nSi salís ahora, tu rival ganará 3–0.")) return;
+    const button=$("leaveRoomButton");
+    button.disabled=true;
+    button.textContent="Registrando abandono...";
+    try{
+      await forfeitTournamentMatch(tournamentId,tournamentMatchId);
+      leaveRoom(true,false);
+    }catch(error){
+      console.error("No se pudo registrar el abandono:",error);
+      button.disabled=false;
+      button.textContent="Salir de la sala";
+      alert(error?.message||"No se pudo salir del partido.");
+    }
+    return;
+  }
+  leaveRoom(true,true);
+});
 
 async function boot(){
   await startV2App(firebaseConfig,{
