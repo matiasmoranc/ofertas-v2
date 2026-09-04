@@ -128,36 +128,6 @@ exports.deleteTournament=onCall(async request=>{
   return {ok:true};
 });
 
-exports.leaveTournament=onCall(async request=>{
-  const uid=requireAuth(request);
-  const tournamentId=cleanText(request.data?.tournamentId,80);
-  if(!tournamentId) throw new HttpsError("invalid-argument","Falta el torneo.");
-
-  const target=db.ref(`tournaments/${tournamentId}`);
-  const initial=(await target.get()).val();
-  if(!initial) throw new HttpsError("not-found","El torneo ya no existe.");
-  if(initial.status!=="waiting" || initial.matches){
-    throw new HttpsError("failed-precondition","El torneo ya comenzó y no podés salir.");
-  }
-  if(!initial.participants?.[uid]){
-    throw new HttpsError("failed-precondition","No participás de este torneo.");
-  }
-
-  const left=await target.transaction(tournament=>{
-    if(!tournament || tournament.status!=="waiting" || tournament.matches) return;
-    if(!tournament.participants?.[uid]) return tournament;
-    delete tournament.participants[uid];
-    return tournament;
-  });
-  if(!left.committed){
-    throw new HttpsError("failed-precondition","El torneo se completó y ya no podés salir.");
-  }
-  if(left.snapshot.val()?.participants?.[uid]){
-    throw new HttpsError("aborted","No se pudo salir del torneo.");
-  }
-  return {ok:true};
-});
-
 exports.joinTournament=onCall(async request=>{
   const uid=requireAuth(request);
   const tournamentId=cleanText(request.data?.tournamentId,80);
@@ -209,6 +179,36 @@ exports.joinTournament=onCall(async request=>{
 
 exports.openTournamentMatch=onCall(async request=>{
   const uid=requireAuth(request);
+
+
+  if(request.data?.action==="leaveTournament"){
+    const tournamentId=cleanText(request.data?.tournamentId,80);
+    if(!tournamentId) throw new HttpsError("invalid-argument","Falta el torneo.");
+
+    const target=db.ref(`tournaments/${tournamentId}`);
+    const initial=(await target.get()).val();
+    if(!initial) throw new HttpsError("not-found","El torneo ya no existe.");
+    if(initial.status!=="waiting" || initial.matches){
+      throw new HttpsError("failed-precondition","El torneo ya comenzó y no podés salir.");
+    }
+    if(!initial.participants?.[uid]){
+      throw new HttpsError("failed-precondition","No participás de este torneo.");
+    }
+
+    const left=await target.transaction(tournament=>{
+      if(!tournament || tournament.status!=="waiting" || tournament.matches) return;
+      if(!tournament.participants?.[uid]) return tournament;
+      delete tournament.participants[uid];
+      return tournament;
+    });
+    if(!left.committed){
+      throw new HttpsError("failed-precondition","El torneo se completó y ya no podés salir.");
+    }
+    if(left.snapshot.val()?.participants?.[uid]){
+      throw new HttpsError("aborted","No se pudo salir del torneo.");
+    }
+    return {ok:true};
+  }
 
   // Reutilizamos esta función ya autorizada para reparar resultados
   // pendientes, evitando crear otro servicio con permisos IAM nuevos.
