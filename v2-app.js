@@ -37,7 +37,7 @@ async function openTournamentRoomOnce(code){
 export function getV2Profile(){ return profile; }
 export async function forfeitTournamentMatch(tournamentId,matchId){
   if(!functions || !tournamentId || !matchId) return;
-  return httpsCallable(functions,"forfeitTournamentMatch")({tournamentId,matchId});
+  return httpsCallable(functions,"openTournamentMatch")({tournamentId,matchId,action:"forfeit"});
 }
 
 function el(id){ return document.getElementById(id); }
