@@ -157,7 +157,7 @@ button,a,input,select,textarea,[role="button"]{touch-action:manipulation}
   pointer-events:none;
   opacity:0;
   transform:scale(.55);
-  font-size:clamp(82px,24vw,150px);
+  font-size:clamp(66px,19.2vw,120px);
   filter:drop-shadow(0 12px 20px rgba(0,0,0,.65));
 }
 .emoji-reaction-overlay.show{animation:emojiReaction 1.8s ease-out both}
