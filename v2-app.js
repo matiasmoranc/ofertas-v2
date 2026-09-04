@@ -11,6 +11,10 @@ let profile=null, auth=null, db=null, functions=null, stopUser=null, stopTournam
 let callbacks={};
 let tournamentRoomOpening="";
 let tournamentRoomPromise=null;
+let readyInviteKey="";
+let dismissedReadyInviteKey="";
+const readyExpiryTimers=new Map();
+const readyExpiryRequests=new Set();
 
 async function openTournamentRoomOnce(code){
   if(!code) return;
@@ -32,6 +36,112 @@ async function openTournamentRoomOnce(code){
     throw lastError||new Error("No se pudo abrir el partido.");
   })();
   return tournamentRoomPromise;
+}
+
+function closeReadyInvite(dismiss=false){
+  const modal=el("tournamentReadyInvite");
+  if(dismiss && readyInviteKey) dismissedReadyInviteKey=readyInviteKey;
+  if(modal) modal.remove();
+  readyInviteKey="";
+}
+async function markTournamentReady(tournamentId,matchId){
+  const result=await httpsCallable(functions,"openTournamentMatch")({tournamentId,matchId});
+  if(result.data.roomCode){
+    closeReadyInvite();
+    await openTournamentRoomOnce(result.data.roomCode);
+  }
+  return result.data;
+}
+function showReadyInvite(invite){
+  const key=[invite.tournamentId,invite.matchId,invite.opponentUid,invite.readyAt].join("|");
+  if(key===dismissedReadyInviteKey || key===readyInviteKey) return;
+  closeReadyInvite();
+  readyInviteKey=key;
+  const modal=document.createElement("div");
+  modal.id="tournamentReadyInvite";
+  modal.className="tournament-ready-overlay";
+  modal.innerHTML=`<div class="tournament-ready-popup" role="dialog" aria-modal="true" aria-labelledby="tournamentReadyTitle">
+    <button class="tournament-ready-close" type="button" aria-label="Cerrar">×</button>
+    <div class="tournament-ready-icon">⚽</div>
+    <h3 id="tournamentReadyTitle">¡TU RIVAL ESTÁ LISTO!</h3>
+    <p><strong>${esc(invite.opponentName)}</strong> está pronto para jugar el partido del torneo <strong>${esc(invite.tournamentName)}</strong>.</p>
+    <button class="small-action green tournament-ready-play" type="button">JUGAR AHORA</button>
+    <small>La invitación vence 10 minutos después de que el rival quedó listo.</small>
+  </div>`;
+  modal.querySelector(".tournament-ready-close").onclick=()=>closeReadyInvite(true);
+  modal.querySelector(".tournament-ready-play").onclick=async event=>{
+    const button=event.currentTarget;
+    button.disabled=true;
+    button.textContent="PREPARANDO PARTIDO...";
+    try{
+      const result=await markTournamentReady(invite.tournamentId,invite.matchId);
+      if(!result.roomCode){
+        button.disabled=false;
+        button.textContent="JUGAR AHORA";
+      }
+    }catch(error){
+      button.disabled=false;
+      button.textContent="JUGAR AHORA";
+      alert(error?.message||"No se pudo abrir el partido.");
+    }
+  };
+  document.body.appendChild(modal);
+}
+function syncTournamentReadiness(data={}){
+  const currentUid=auth.currentUser?.uid;
+  if(!currentUid) return;
+  const activeExpiryKeys=new Set();
+  let invitation=null;
+  const now=Date.now();
+  for(const [tournamentId,tournament] of Object.entries(data)){
+    for(const [matchId,match] of Object.entries(tournament?.matches||{})){
+      const mine=match?.playerAUid===currentUid||match?.playerBUid===currentUid;
+      if(!mine || match.status!=="ready" || match.winnerUid) continue;
+      const readyPlayers=match.readyPlayers||{};
+      for(const [playerUid,ready] of Object.entries(readyPlayers)){
+        const readyAt=Number(ready?.readyAt||0);
+        if(!readyAt) continue;
+        const expiryKey=[tournamentId,matchId,playerUid,readyAt].join("|");
+        activeExpiryKeys.add(expiryKey);
+        if(!readyExpiryTimers.has(expiryKey)){
+          const expire=async()=>{
+            if(readyExpiryRequests.has(expiryKey)) return;
+            readyExpiryRequests.add(expiryKey);
+            try{
+              await httpsCallable(functions,"openTournamentMatch")({
+                tournamentId,matchId,action:"expireReady"
+              });
+            }catch(error){
+              console.error("No se pudo vencer la espera del torneo:",error);
+            }finally{
+              readyExpiryRequests.delete(expiryKey);
+              clearTimeout(readyExpiryTimers.get(expiryKey));
+              readyExpiryTimers.delete(expiryKey);
+            }
+          };
+          readyExpiryTimers.set(expiryKey,setTimeout(expire,Math.max(0,readyAt+(10*60*1000)-now)));
+        }
+      }
+      const opponentUid=match.playerAUid===currentUid?match.playerBUid:match.playerAUid;
+      const opponentReady=readyPlayers[opponentUid];
+      if(!readyPlayers[currentUid] && opponentReady && Number(opponentReady.readyAt||0)+(10*60*1000)>now && !invitation){
+        invitation={
+          tournamentId,matchId,opponentUid,
+          opponentName:opponentReady.username||(match.playerAUid===opponentUid?match.playerAName:match.playerBName)||"Tu rival",
+          tournamentName:tournament.name||"el torneo",
+          readyAt:Number(opponentReady.readyAt)
+        };
+      }
+    }
+  }
+  for(const [key,timer] of readyExpiryTimers){
+    if(!activeExpiryKeys.has(key)){
+      clearTimeout(timer);
+      readyExpiryTimers.delete(key);
+    }
+  }
+  if(invitation) showReadyInvite(invitation);
+  else closeReadyInvite();
 }
 
 export function getV2Profile(){ return profile; }
@@ -212,6 +322,7 @@ function renderTournaments(data={}){
   const node=el("tournamentsPanelContent"); if(!node) return;
   const list=Object.entries(data).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
   node.innerHTML=`<div class="tournament-create"><input id="tournamentName" class="auth-input" maxlength="28" placeholder="Nombre del torneo"><button id="createTournamentButton" class="small-action green">CREAR</button></div><div id="tournamentMessage" class="auth-message"></div><div class="tournament-list">${list.length?list.map(([id,t])=>tournamentCard(id,t)).join(""):'<div class="empty-state">No hay torneos todavía. Creá el primero.</div>'}</div>`;
+  syncTournamentReadiness(data);
   const currentUid=auth.currentUser?.uid;
   for(const [tournamentId,tournament] of Object.entries(data||{})){
     for(const [matchId,match] of Object.entries(tournament?.matches||{})){
@@ -340,9 +451,9 @@ function bindUI(){
       }
       if(open){
         msg.textContent="Marcándote como pronto...";
-        const result=await httpsCallable(functions,"openTournamentMatch")({tournamentId:open.dataset.openTournament,matchId:open.dataset.match});
+        const result={data:await markTournamentReady(open.dataset.openTournament,open.dataset.match)};
         if(result.data.roomCode){
-          await openTournamentRoomOnce(result.data.roomCode);
+          // markTournamentReady ya abrió la sala.
         }else{
           msg.textContent=result.data.message||"Estás pronto. Esperando que entre tu rival...";
           return;
