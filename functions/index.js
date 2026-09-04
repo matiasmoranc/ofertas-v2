@@ -329,7 +329,7 @@ function validOfficialResult(game,result){
      del mini partido, no contra la forma de serialización del plantel. */
   const ga=Number(result?.goalsA), gb=Number(result?.goalsB);
   if(!Number.isInteger(ga)||!Number.isInteger(gb)||ga<0||gb<0||ga>20||gb>20) return false;
-  if(Number(game.miniMatch?.score?.A)!==ga || Number(game.miniMatch?.score?.B)!==gb) return false;
+  if(result?.fromMiniMatch!==true || !game.miniMatch) return false;
   const expected=ga>gb?"A":gb>ga?"B":"DRAW";
   return result.winner===expected;
 }
@@ -337,11 +337,15 @@ async function applyUserResult(uid,room,entry,outcome,goalsFor,goalsAgainst){
   await db.ref(`users/${uid}`).transaction(user=>{
     if(!user) return;
     user.appliedMatches=user.appliedMatches||{};
-    if(user.appliedMatches[room]) return user;
-    user.appliedMatches[room]=true;
+    const alreadyApplied=Boolean(user.appliedMatches[room]);
     user.stats={played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,...(user.stats||{})};
-    user.stats.played++; user.stats.goalsFor+=goalsFor; user.stats.goalsAgainst+=goalsAgainst;
-    if(outcome==="win")user.stats.won++; else if(outcome==="loss")user.stats.lost++; else user.stats.drawn++;
+    if(!alreadyApplied){
+      user.appliedMatches[room]=true;
+      user.stats.played++; user.stats.goalsFor+=goalsFor; user.stats.goalsAgainst+=goalsAgainst;
+      if(outcome==="win")user.stats.won++; else if(outcome==="loss")user.stats.lost++; else user.stats.drawn++;
+    }
+    // Reponer la ficha si una ejecución anterior alcanzó las estadísticas
+    // pero se interrumpió antes de guardar el historial.
     user.history=user.history||{}; user.history[room]=entry;
     return user;
   });
@@ -406,8 +410,8 @@ async function processOfficialGame(room,game,result){
     tournamentId:game.tournamentId||null,tournamentMatchId:game.tournamentMatchId||null,
     finishedAt:Date.now()
   });
-  if(created.snapshot.val()?.processed) return {processed:false,reason:"already-processed"};
-
+  // applyUserResult es idempotente: se ejecuta también si el partido ya
+  // estaba marcado como procesado para reparar historiales incompletos.
   const aWin=result.winner==="A", bWin=result.winner==="B";
   const common={finishedAt:Date.now(),tournamentId:game.tournamentId||null};
   const tournamentName=game.tournamentId?
