@@ -48,3 +48,15 @@ body.auth-loading .boot-loader{display:flex}
 .rivalry-record strong,.rivalry-record span{display:block}
 .rivalry-record strong{font-size:19px}
 .rivalry-record span{margin-top:3px;font-size:8px;color:#91a39a}
+
+
+/* Aviso en tiempo real cuando el rival de torneo queda listo */
+.tournament-ready-overlay{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.72);backdrop-filter:blur(5px)}
+.tournament-ready-popup{position:relative;width:min(420px,100%);padding:28px 24px 22px;text-align:center;background:#0d2117;border:1px solid rgba(173,255,47,.48);border-radius:22px;box-shadow:0 22px 70px rgba(0,0,0,.65),0 0 34px rgba(173,255,47,.12)}
+.tournament-ready-close{position:absolute;top:10px;right:12px;width:38px;height:38px;padding:0;border:0;border-radius:50%;color:#a9b8b0;background:rgba(255,255,255,.07);font-size:27px;line-height:1;cursor:pointer}
+.tournament-ready-icon{font-size:44px;margin-bottom:8px}
+.tournament-ready-popup h3{margin:0 30px 12px;color:#baff42;font-size:23px}
+.tournament-ready-popup p{margin:0 0 18px;color:#e5eee9;font-size:15px;line-height:1.5}
+.tournament-ready-popup .tournament-ready-play{width:100%;min-height:50px;margin-bottom:12px}
+.tournament-ready-popup small{display:block;color:#8ea198;font-size:11px;line-height:1.4}
+@media(max-width:520px){.tournament-ready-popup{padding:25px 18px 20px}.tournament-ready-popup h3{font-size:20px}}
