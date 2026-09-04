@@ -2198,7 +2198,7 @@ position: fixed;
 
 <script type="module">
 import { firebaseConfig } from "./firebase-config.js";
-import { startV2App, getV2Profile, forfeitTournamentMatch } from "./v2-app.js?v=20260904-7";
+import { startV2App, getV2Profile, forfeitTournamentMatch, syncOfficialGameResult } from "./v2-app.js?v=20260904-8";
 import { getDatabase, ref, get, update, onValue, runTransaction, remove, set, onDisconnect } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
 
 /* =================================================
@@ -2430,6 +2430,8 @@ let myTeam = null;
 let isSpectator = false;
 let gameState = null;
 let unsubscribeGame = null;
+let resultSyncKey = "";
+let resultSyncPromise = null;
 let selectedBid = 1;
 let openedMiniTeam = null;
 let lastAuctionKey = "";
@@ -4461,6 +4463,19 @@ function enterGameScreen(state){
   }
 }
 
+async function ensureResultSynced(code,state=gameState){
+  if(!code || !state?.result || isSpectator) return;
+  const key=state.matchInstanceId||code;
+  if(resultSyncKey===key && resultSyncPromise) return resultSyncPromise;
+  resultSyncKey=key;
+  resultSyncPromise=syncOfficialGameResult(code).catch(error=>{
+    resultSyncKey="";
+    resultSyncPromise=null;
+    throw error;
+  });
+  return resultSyncPromise;
+}
+
 function listenToRoom(code){
   if(unsubscribeGame) unsubscribeGame();
   listenToSpectators(code);
@@ -4486,6 +4501,17 @@ function listenToRoom(code){
        usuarios puedan entrar como espectadores. Al terminar, se quitan del lobby. */
     if(state.result){
       remove(ref(db,`openRooms/${code}`)).catch(()=>{});
+      if(!isSpectator){
+        const leaveButton=$("leaveRoomButton");
+        if(leaveButton){leaveButton.disabled=true;leaveButton.textContent="Guardando resultado...";}
+        ensureResultSynced(code,state).then(()=>{
+          if(leaveButton){leaveButton.disabled=false;leaveButton.textContent="Salir de la sala";}
+        }).catch(error=>{
+          console.error("No se pudo guardar el resultado:",error);
+          if(leaveButton){leaveButton.disabled=false;leaveButton.textContent="Reintentar guardado";}
+          if($("connectionText")) $("connectionText").textContent="No se guardó el resultado. Pulsá Reintentar guardado.";
+        });
+      }
     }
 
     enterGameScreen(state);
@@ -4625,6 +4651,20 @@ rootMiniButtons().forEach(button=>{
 $("revengeButton").addEventListener("click",resetGame);
 $("miniBriefingButton")?.addEventListener("click",dismissMiniBriefing);
 $("leaveRoomButton").addEventListener("click",async()=>{
+  if(gameState?.result && !isSpectator){
+    const button=$("leaveRoomButton");
+    button.disabled=true;
+    button.textContent="Guardando resultado...";
+    try{
+      await ensureResultSynced(roomCode,gameState);
+    }catch(error){
+      console.error("No se pudo confirmar el resultado:",error);
+      button.disabled=false;
+      button.textContent="Reintentar guardado";
+      alert("No se pudo guardar el resultado. Revisá tu conexión y volvé a intentarlo.");
+      return;
+    }
+  }
   const tournamentId=gameState?.tournamentId;
   const tournamentMatchId=gameState?.tournamentMatchId;
   if(tournamentId && tournamentMatchId && gameState?.status==="playing" && !gameState?.result && !isSpectator){
