@@ -412,7 +412,28 @@ async function advanceTournament(game,result,winnerUid,winnerName){
   const tournamentRef=db.ref(`tournaments/${game.tournamentId}`);
   const advanced=await tournamentRef.transaction(t=>{
     const match=t?.matches?.[game.tournamentMatchId];
-    if(!match || match.winnerUid) return t;
+    if(!match) return t;
+    if(match.winnerUid){
+      match.roomCode=null;
+      delete match.readyPlayers;
+      if(game.tournamentMatchId!=="final"){
+        const finalMatch={...(t.matches.final||{}),label:"FINAL",status:"pending"};
+        if(game.tournamentMatchId==="semifinal1"){
+          finalMatch.playerAUid=match.winnerUid;
+          finalMatch.playerAName=match.winnerName;
+        }else{
+          finalMatch.playerBUid=match.winnerUid;
+          finalMatch.playerBName=match.winnerName;
+        }
+        const s1=t.matches.semifinal1, s2=t.matches.semifinal2;
+        if(s1?.winnerUid&&s2?.winnerUid){
+          t.status="final";
+          finalMatch.status="ready";
+        }
+        t.matches.final=finalMatch;
+      }
+      return t;
+    }
     if(!winnerUid){
       match.status="ready"; match.roomCode=null; delete match.readyPlayers;
       match.draws=Number(match.draws||0)+1;
