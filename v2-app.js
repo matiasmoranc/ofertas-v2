@@ -405,7 +405,7 @@ function tournamentCard(id,t){
   return `<div class="tournament-item tournament-fixture">
     <div class="tournament-row">
       <div><strong class="tournament-name">${esc(t.name||"Torneo")}</strong><div class="item-meta">${status} · ${participants.length}/4 jugadores</div></div>
-      <div class="tournament-actions">${t.status==="waiting"&&!joined?`<button class="small-action" data-join-tournament="${esc(id)}">UNIRME</button>`:""}${isOwner?`<button class="small-action danger" data-delete-tournament="${esc(id)}" title="Eliminar torneo">ELIMINAR</button>`:""}<button class="small-action" data-toggle-tournament="${esc(id)}" aria-expanded="${expanded}">${expanded?"OCULTAR":"VER TORNEO"}</button></div>
+      <div class="tournament-actions">${t.status==="waiting"&&!joined?`<button class="small-action" data-join-tournament="${esc(id)}">UNIRME</button>`:""}${isOwner?`<button class="small-action danger" data-delete-tournament="${esc(id)}" title="Eliminar torneo">ELIMINAR</button>`:""}<button class="small-action tournament-toggle-icon" data-toggle-tournament="${esc(id)}" aria-expanded="${expanded}" aria-label="${expanded?"Comprimir torneo":"Desplegar torneo"}" title="${expanded?"Comprimir torneo":"Desplegar torneo"}"><span aria-hidden="true">${expanded?"▴":"▾"}</span></button></div>
     </div>
     <div class="tournament-collapsible ${expanded?"":"screen-hidden"}">
       ${waitingSlots}
@@ -458,7 +458,10 @@ function bindUI(){
       tournamentExpansionOverrides.set(id,expanded);
       body?.classList.toggle("screen-hidden",!expanded);
       toggle.setAttribute("aria-expanded",String(expanded));
-      toggle.textContent=expanded?"OCULTAR":"VER TORNEO";
+      const label=expanded?"Comprimir torneo":"Desplegar torneo";
+      toggle.setAttribute("aria-label",label);
+      toggle.title=label;
+      toggle.innerHTML=`<span aria-hidden="true">${expanded?"▴":"▾"}</span>`;
       return;
     }
     if(msg) msg.className="auth-message";
