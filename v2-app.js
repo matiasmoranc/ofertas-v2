@@ -146,6 +146,13 @@ function syncTournamentReadiness(data={}){
 }
 
 export function getV2Profile(){ return profile; }
+export async function markTournamentMatchEntered(tournamentId,matchId,roomCode){
+  if(!functions || !tournamentId || !matchId || !roomCode) throw new Error("No se pudo identificar el partido.");
+  const result=await httpsCallable(functions,"openTournamentMatch")({
+    tournamentId,matchId,roomCode,action:"entered"
+  });
+  return result.data;
+}
 export async function forfeitTournamentMatch(tournamentId,matchId){
   if(!functions || !tournamentId || !matchId) return;
   return httpsCallable(functions,"openTournamentMatch")({tournamentId,matchId,action:"forfeit"});
