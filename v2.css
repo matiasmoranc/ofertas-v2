@@ -259,19 +259,20 @@ body.dialog-open{overflow:hidden}
 
 /* Reglamento del lobby */
 .rules-open-button{
-  width:100%;
-  margin:0 0 14px;
-  padding:12px 15px;
-  border:1px solid rgba(186,255,66,.38);
-  border-radius:14px;
-  background:rgba(186,255,66,.08);
-  color:#baff42;
-  font-size:13px;
-  font-weight:900;
-  letter-spacing:.8px;
+  display:block;
+  width:max-content;
+  margin:22px auto 0;
+  padding:6px 8px;
+  border:0;
+  background:transparent;
+  color:#77887e;
+  font-size:11px;
+  font-weight:700;
+  text-decoration:underline;
+  text-underline-offset:3px;
   cursor:pointer;
 }
-.rules-open-button:hover{background:rgba(186,255,66,.14)}
+.rules-open-button:hover{color:#baff42;background:transparent}
 .rules-modal-backdrop{
   position:fixed;
   inset:0;
