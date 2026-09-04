@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./v2.css?v=20260904-12">
+<link rel="stylesheet" href="./v2.css?v=20260904-13">
 <title>Mercado Élite 5 - Multiplayer</title>
 <style>
 *{
@@ -1953,6 +1953,7 @@ position: fixed;
 <section id="lobbyScreen" class="lobby-wrap">
   <div class="lobby-card">
     <div id="firebaseStatus" class="firebase-status" style="display:none;"></div>
+    <button id="openRulesButton" class="rules-open-button" type="button">📖 REGLAS</button>
     <button id="createRoomButton" class="lobby-button" type="button">🔒 CREAR PARTIDA PRIVADA</button>
 
     <div class="open-room-box">
@@ -2003,6 +2004,102 @@ position: fixed;
     <span id="reconnectMessage">Esperando que el jugador vuelva…</span>
     <b id="reconnectCountdown">2:00</b>
   </aside>
+
+  <div id="rulesModal" class="rules-modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="rulesModalTitle">
+    <article class="rules-modal-card">
+      <header class="rules-modal-header">
+        <div>
+          <span>GUÍA COMPLETA</span>
+          <h2 id="rulesModalTitle">Cómo jugar Mercado Élite 5</h2>
+        </div>
+        <button id="closeRulesButton" type="button" aria-label="Cerrar reglas">✕</button>
+      </header>
+
+      <div class="rules-modal-content">
+        <section>
+          <h3>🎯 Objetivo</h3>
+          <p>Cada jugador comienza con <strong>€20</strong> y debe formar un equipo de hasta <strong>5 futbolistas</strong>. Primero se construyen los planteles mediante subastas y después se define el partido en el minijuego.</p>
+        </section>
+
+        <section>
+          <h3>👥 Posiciones</h3>
+          <p>Los jugadores disponibles pueden ser <strong>GP</strong> (golero), <strong>DF</strong> (defensa), <strong>MD</strong> (mediocampista) o <strong>DL</strong> (delantero).</p>
+          <ul>
+            <li>La primera etapa corresponde a los goleros.</li>
+            <li>Después de esa etapa ya no vuelven a aparecer goleros.</li>
+            <li>Conviene cubrir DF, MD y DL para evitar penalizaciones.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>💰 Subastas</h3>
+          <ul>
+            <li>Los turnos para ofertar o pasar se alternan entre ambos equipos.</li>
+            <li>La primera oferta es de al menos <strong>€1</strong>. Para superar una oferta hay que agregar como mínimo €1.</li>
+            <li>El ganador de la puja paga la cantidad ofrecida y suma al futbolista.</li>
+            <li>No podés comprar si completaste los 5 lugares o no tenés dinero suficiente.</li>
+            <li>Si no podés superar una oferta, el pase es obligatorio y el jugador se entrega al líder.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>✋ Regla de pases</h3>
+          <p>Cada equipo puede pasar hasta <strong>3 veces consecutivas</strong> cuando tiene dinero para ofertar. Después debe realizar una oferta para volver a habilitar el pase. Los pases obligatorios por falta de dinero no consumen ese límite.</p>
+        </section>
+
+        <section>
+          <h3>⚠️ Penalizaciones y bonificaciones</h3>
+          <ul>
+            <li>Plantel incompleto: 4 jugadores conservan el 80% de la media; 3 el 60%; 2 el 40%; y 1 el 20%.</li>
+            <li>Sin DL: <strong>−4,5</strong> en la media del minijuego.</li>
+            <li>Sin MD: <strong>−3,75</strong> en la media del minijuego.</li>
+            <li>Sin DF: <strong>−4,5</strong> en la media del minijuego.</li>
+            <li>Una formación equilibrada mejora el rendimiento general. Acumular demasiados jugadores en una misma línea puede perjudicar otras zonas.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>⚽ Minijuego</h3>
+          <ul>
+            <li>El atacante elige izquierda, centro o derecha.</li>
+            <li>El defensor elige en secreto qué sector cubrir.</li>
+            <li>Si ambos eligen el mismo sector, el defensor recupera la pelota.</li>
+            <li>Si eligen sectores diferentes, el atacante avanza. Al completar los avances necesarios, convierte un gol.</li>
+            <li>La media de los planteles determina cuántos ataques y avances necesita cada equipo: una mejor formación otorga ventaja.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>🏆 Torneos</h3>
+          <p>Las copas tienen 4 participantes, dos semifinales y una final. Los empates no clasifican a nadie: se debe jugar una revancha hasta que exista un ganador. En partidos de torneo no hay revancha después de una victoria.</p>
+        </section>
+
+        <section>
+          <h3>🔌 Desconexiones y abandonos</h3>
+          <ul>
+            <li>Si se corta internet o se cierra accidentalmente la página, el partido se pausa durante <strong>2 minutos</strong>.</li>
+            <li>Si el jugador vuelve dentro de ese plazo, la partida continúa.</li>
+            <li>Si no vuelve, pierde <strong>0–3</strong>.</li>
+            <li>Salir voluntariamente durante un partido iniciado provoca una derrota inmediata por <strong>0–3</strong>.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>💬 Emojis y espectadores</h3>
+          <p>Los jugadores pueden enviar 😂 👏 🤬 💩 🤝, como máximo uno cada 3 segundos. Los espectadores ven el partido y las reacciones, pero no pueden jugar ni enviar emojis.</p>
+        </section>
+
+        <section>
+          <h3>📊 Historial</h3>
+          <p>Las victorias, empates y derrotas se guardan al finalizar el partido. El historial agrupa los enfrentamientos contra cada rival y también registra las copas ganadas.</p>
+        </section>
+      </div>
+
+      <footer class="rules-modal-footer">
+        <button id="understoodRulesButton" type="button">ENTENDIDO</button>
+      </footer>
+    </article>
+  </div>
 
   <div id="gameDialog" class="game-dialog-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="gameDialogTitle">
     <div class="game-dialog-card">
@@ -4949,6 +5046,26 @@ function changeBid(delta){
   $("bidValue").textContent=selectedBid;
   $("offerButton").textContent=`OFERTAR €${selectedBid}`;
 }
+
+function openRules(){
+  $("rulesModal").classList.remove("hidden");
+  document.body.classList.add("dialog-open");
+  $("closeRulesButton")?.focus();
+}
+function closeRules(){
+  $("rulesModal").classList.add("hidden");
+  if($("gameDialog")?.classList.contains("hidden")) document.body.classList.remove("dialog-open");
+  $("openRulesButton")?.focus();
+}
+$("openRulesButton")?.addEventListener("click",openRules);
+$("closeRulesButton")?.addEventListener("click",closeRules);
+$("understoodRulesButton")?.addEventListener("click",closeRules);
+$("rulesModal")?.addEventListener("click",event=>{
+  if(event.target===$("rulesModal")) closeRules();
+});
+document.addEventListener("keydown",event=>{
+  if(event.key==="Escape" && !$("rulesModal")?.classList.contains("hidden")) closeRules();
+});
 
 $("createRoomButton").addEventListener("click",createRoom);
 $("createOpenRoomButton").addEventListener("click",createOpenRoom);
