@@ -4556,10 +4556,6 @@ function updateEmojiControls(){
 function showEmojiReaction(event){
   if(!event?.id || event.id===lastEmojiEventId) return;
   const overlay=$("emojiReactionOverlay");
-  if(!lastEmojiEventId){
-    lastEmojiEventId=event.id;
-    return;
-  }
   lastEmojiEventId=event.id;
   if(event.senderUid===uid && !isSpectator) return;
   if(!overlay) return;
