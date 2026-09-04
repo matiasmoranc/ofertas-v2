@@ -405,7 +405,7 @@ function tournamentCard(id,t){
   return `<div class="tournament-item tournament-fixture">
     <div class="tournament-row">
       <div><strong class="tournament-name">${esc(t.name||"Torneo")}</strong><div class="item-meta">${status} · ${participants.length}/4 jugadores</div></div>
-      <div class="tournament-actions">${t.status==="waiting"&&!joined?`<button class="small-action" data-join-tournament="${esc(id)}">UNIRME</button>`:""}${isOwner?`<button class="small-action danger" data-delete-tournament="${esc(id)}" title="Eliminar torneo">ELIMINAR</button>`:""}<button class="small-action tournament-toggle-icon" data-toggle-tournament="${esc(id)}" aria-expanded="${expanded}" aria-label="${expanded?"Comprimir torneo":"Desplegar torneo"}" title="${expanded?"Comprimir torneo":"Desplegar torneo"}"><span aria-hidden="true">${expanded?"▴":"▾"}</span></button></div>
+      <div class="tournament-actions">${t.status==="waiting"&&!joined?`<button class="small-action" data-join-tournament="${esc(id)}">UNIRME</button>`:""}${t.status==="waiting"&&joined?`<button class="small-action danger" data-leave-tournament="${esc(id)}">SALIR</button>`:""}${isOwner?`<button class="small-action danger" data-delete-tournament="${esc(id)}" title="Eliminar torneo">ELIMINAR</button>`:""}<button class="small-action tournament-toggle-icon" data-toggle-tournament="${esc(id)}" aria-expanded="${expanded}" aria-label="${expanded?"Comprimir torneo":"Desplegar torneo"}" title="${expanded?"Comprimir torneo":"Desplegar torneo"}"><span aria-hidden="true">${expanded?"▴":"▾"}</span></button></div>
     </div>
     <div class="tournament-collapsible ${expanded?"":"screen-hidden"}">
       ${waitingSlots}
@@ -449,7 +449,7 @@ function bindUI(){
   el("resetPassword").onclick=async()=>{const email=el("loginEmail").value.trim();if(!email)return setMessage("Escribí tu correo primero.",true);try{await sendPasswordResetEmail(auth,email);setMessage("Te enviamos un correo para cambiar la contraseña.");}catch(err){setMessage(authError(err),true);}};
   el("logoutButton").onclick=()=>signOut(auth);
   el("tournamentsPanelContent").addEventListener("click",async e=>{
-    const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), open=e.target.closest("[data-open-tournament]"), cancelReady=e.target.closest("[data-cancel-ready]"), remove=e.target.closest("[data-delete-tournament]"), toggle=e.target.closest("[data-toggle-tournament]");
+    const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), leave=e.target.closest("[data-leave-tournament]"), open=e.target.closest("[data-open-tournament]"), cancelReady=e.target.closest("[data-cancel-ready]"), remove=e.target.closest("[data-delete-tournament]"), toggle=e.target.closest("[data-toggle-tournament]");
     const msg=el("tournamentMessage");
     if(toggle){
       const id=toggle.dataset.toggleTournament;
@@ -468,6 +468,14 @@ function bindUI(){
     try{
       if(create){const name=el("tournamentName").value.trim();if(name.length<3)throw new Error("Escribí un nombre para el torneo.");msg.textContent="Creando torneo...";await httpsCallable(functions,"createTournament")({name});}
       if(join){msg.textContent="Uniéndote...";await httpsCallable(functions,"joinTournament")({tournamentId:join.dataset.joinTournament});}
+      if(leave){
+        const card=leave.closest(".tournament-item"), name=card?.querySelector(".tournament-name")?.textContent||"este torneo";
+        if(!confirm(`¿Salir de “${name}”? Podrás volver a unirte mientras siga habiendo lugar.`)) return;
+        leave.disabled=true;
+        msg.textContent="Saliendo del torneo...";
+        await httpsCallable(functions,"leaveTournament")({tournamentId:leave.dataset.leaveTournament});
+        tournamentExpansionOverrides.delete(leave.dataset.leaveTournament);
+      }
       if(cancelReady){
         if(!confirm("¿Cancelar la espera? Los dos jugadores dejarán de figurar como prontos.")) return;
         msg.textContent="Cancelando espera...";
