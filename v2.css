@@ -82,3 +82,17 @@ body.auth-loading .boot-loader{display:flex}
   .admin-toolbar{grid-template-columns:1fr}
   .admin-match-row{align-items:flex-start;flex-direction:column}
 }
+
+/* Administración organizada en usuarios y copas */
+.admin-main-tabs{display:grid;grid-template-columns:1fr 1fr 38px;gap:7px;margin-bottom:8px}
+.admin-refresh{width:38px;padding:0;font-size:19px}
+.admin-collapsible{padding:0;overflow:hidden}
+.admin-collapsible>summary{padding:13px;cursor:pointer;list-style:none;user-select:none}
+.admin-collapsible>summary::-webkit-details-marker{display:none}
+.admin-collapsible>summary span{display:flex;align-items:center;gap:8px}
+.admin-collapsible>summary i::before{content:"▾";color:#baff42;font-style:normal;font-size:17px}
+.admin-collapsible[open]>summary i::before{content:"▴"}
+.admin-card-body{padding:0 13px 13px;border-top:1px solid rgba(255,255,255,.08)}
+.admin-inner-title{margin:13px 0 7px;color:#91a39a;font-size:9px;letter-spacing:1.2px}
+.admin-participant-list{display:grid;gap:6px}
+.admin-participant-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border-radius:8px;background:rgba(0,0,0,.2);font-size:11px}
