@@ -2198,7 +2198,7 @@ position: fixed;
 
 <script type="module">
 import { firebaseConfig } from "./firebase-config.js";
-import { startV2App, getV2Profile, forfeitTournamentMatch } from "./v2-app.js?v=20260904-6";
+import { startV2App, getV2Profile, forfeitTournamentMatch } from "./v2-app.js?v=20260904-7";
 import { getDatabase, ref, get, update, onValue, runTransaction, remove, set, onDisconnect } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
 
 /* =================================================
@@ -4573,12 +4573,18 @@ function leaveRoom(clearUrl=true, closeActiveMatch=false){
   if($("spectatorToast")) $("spectatorToast").classList.remove("show");
 
   if(db && oldRoomCode && closeActiveMatch && wasActivePlayer){
-    /* Esta eliminación solo se ejecuta al pulsar "Salir de la sala".
-       Salir como espectador no cierra la partida. */
-    Promise.all([
-      remove(ref(db,`openRooms/${oldRoomCode}`)),
-      remove(ref(db,`games/${oldRoomCode}`))
-    ]).catch(error=>console.warn("No se pudo cerrar la partida al salir:",error));
+    /* Un resultado terminado debe permanecer hasta que la función del
+       historial lo procese. Solo quitamos su publicación del lobby.
+       Las partidas abandonadas antes de finalizar sí se cierran. */
+    if(gameState?.result){
+      remove(ref(db,`openRooms/${oldRoomCode}`))
+        .catch(error=>console.warn("No se pudo quitar la mesa finalizada:",error));
+    }else{
+      Promise.all([
+        remove(ref(db,`openRooms/${oldRoomCode}`)),
+        remove(ref(db,`games/${oldRoomCode}`))
+      ]).catch(error=>console.warn("No se pudo cerrar la partida al salir:",error));
+    }
   }else if(db && oldRoomCode && wasOpen && wasWaiting && wasTeamA){
     remove(ref(db,`openRooms/${oldRoomCode}`)).catch(error=>console.warn("No se pudo quitar la mesa abierta:",error));
   }
