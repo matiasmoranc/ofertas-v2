@@ -15,6 +15,7 @@ let readyInviteKey="";
 let dismissedReadyInviteKey="";
 const readyExpiryTimers=new Map();
 const readyExpiryRequests=new Set();
+const tournamentExpansionOverrides=new Map();
 
 async function openTournamentRoomOnce(code){
   if(!code) return;
@@ -396,6 +397,7 @@ function tournamentBracket(id,t){
 function tournamentCard(id,t){
   const participants=Object.values(t.participants||{}), joined=participants.some(p=>p.uid===auth.currentUser?.uid), isOwner=t.ownerUid===auth.currentUser?.uid;
   const status={waiting:"ESPERANDO",semifinals:"SEMIFINALES",final:"FINAL",completed:"FINALIZADO"}[t.status]||"TORNEO";
+  const expanded=tournamentExpansionOverrides.has(id)?tournamentExpansionOverrides.get(id):joined;
   const waitingSlots=t.status==="waiting"?`<div class="waiting-slots">${[0,1,2,3].map((_,index)=>{
     const player=participants[index];
     return `<div class="waiting-slot ${player?"filled":""}"><span>${index+1}</span>${esc(player?.username||"Lugar disponible")}</div>`;
@@ -403,11 +405,13 @@ function tournamentCard(id,t){
   return `<div class="tournament-item tournament-fixture">
     <div class="tournament-row">
       <div><strong class="tournament-name">${esc(t.name||"Torneo")}</strong><div class="item-meta">${status} · ${participants.length}/4 jugadores</div></div>
-      <div class="tournament-actions">${t.status==="waiting"&&!joined?`<button class="small-action" data-join-tournament="${esc(id)}">UNIRME</button>`:""}${isOwner?`<button class="small-action danger" data-delete-tournament="${esc(id)}" title="Eliminar torneo">ELIMINAR</button>`:""}</div>
+      <div class="tournament-actions">${t.status==="waiting"&&!joined?`<button class="small-action" data-join-tournament="${esc(id)}">UNIRME</button>`:""}${isOwner?`<button class="small-action danger" data-delete-tournament="${esc(id)}" title="Eliminar torneo">ELIMINAR</button>`:""}<button class="small-action" data-toggle-tournament="${esc(id)}" aria-expanded="${expanded}">${expanded?"OCULTAR":"VER TORNEO"}</button></div>
     </div>
-    ${waitingSlots}
-    ${t.matches?tournamentBracket(id,t):""}
-    ${t.winnerName?`<div class="champion-banner"><span class="rotating-trophy">🏆</span><div><small>CAMPEÓN</small><strong>${esc(t.winnerName)}</strong></div></div>`:""}
+    <div class="tournament-collapsible ${expanded?"":"screen-hidden"}">
+      ${waitingSlots}
+      ${t.matches?tournamentBracket(id,t):""}
+      ${t.winnerName?`<div class="champion-banner"><span class="rotating-trophy">🏆</span><div><small>CAMPEÓN</small><strong>${esc(t.winnerName)}</strong></div></div>`:""}
+    </div>
   </div>`;
 }
 
@@ -445,8 +449,18 @@ function bindUI(){
   el("resetPassword").onclick=async()=>{const email=el("loginEmail").value.trim();if(!email)return setMessage("Escribí tu correo primero.",true);try{await sendPasswordResetEmail(auth,email);setMessage("Te enviamos un correo para cambiar la contraseña.");}catch(err){setMessage(authError(err),true);}};
   el("logoutButton").onclick=()=>signOut(auth);
   el("tournamentsPanelContent").addEventListener("click",async e=>{
-    const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), open=e.target.closest("[data-open-tournament]"), cancelReady=e.target.closest("[data-cancel-ready]"), remove=e.target.closest("[data-delete-tournament]");
+    const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), open=e.target.closest("[data-open-tournament]"), cancelReady=e.target.closest("[data-cancel-ready]"), remove=e.target.closest("[data-delete-tournament]"), toggle=e.target.closest("[data-toggle-tournament]");
     const msg=el("tournamentMessage");
+    if(toggle){
+      const id=toggle.dataset.toggleTournament;
+      const body=toggle.closest(".tournament-item")?.querySelector(".tournament-collapsible");
+      const expanded=Boolean(body?.classList.contains("screen-hidden"));
+      tournamentExpansionOverrides.set(id,expanded);
+      body?.classList.toggle("screen-hidden",!expanded);
+      toggle.setAttribute("aria-expanded",String(expanded));
+      toggle.textContent=expanded?"OCULTAR":"VER TORNEO";
+      return;
+    }
     if(msg) msg.className="auth-message";
     try{
       if(create){const name=el("tournamentName").value.trim();if(name.length<3)throw new Error("Escribí un nombre para el torneo.");msg.textContent="Creando torneo...";await httpsCallable(functions,"createTournament")({name});}
