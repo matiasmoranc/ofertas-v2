@@ -2190,7 +2190,9 @@ position: fixed;
       </div>
     </div>
 
+    <div id="tournamentDrawNotice" class="hidden" style="margin:16px 0 10px;color:#ffd454;font-weight:700;line-height:1.45;">El partido terminó empatado y el torneo necesita un ganador. La revancha comenzará cuando ambos elijan jugar ahora.</div>
     <button id="revengeButton" class="revenge-button" type="button">🔄 REVANCHA</button>
+    <button id="tournamentLaterButton" class="reset-button hidden" type="button" style="margin-top:10px;background:rgba(255,255,255,.08);color:white;">JUGAR LUEGO</button>
   </section>
   <button id="leaveRoomButton" class="reset-button" type="button" style="background:rgba(255,255,255,.08);color:white;">Salir de la sala</button>
 </section>
@@ -2198,7 +2200,7 @@ position: fixed;
 
 <script type="module">
 import { firebaseConfig } from "./firebase-config.js";
-import { startV2App, getV2Profile, forfeitTournamentMatch, syncOfficialGameResult } from "./v2-app.js?v=20260904-11";
+import { startV2App, getV2Profile, forfeitTournamentMatch, syncOfficialGameResult, readyTournamentRematch, postponeTournamentRematch } from "./v2-app.js?v=20260904-12";
 import { getDatabase, ref, get, update, onValue, runTransaction, remove, set, onDisconnect } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
 
 /* =================================================
@@ -3633,7 +3635,10 @@ function renderResult(){
   $("resultCard").classList.remove("hidden");
   $("scoreA").textContent=r.goalsA;
   $("scoreB").textContent=r.goalsB;
-  $("winnerText").textContent=r.winner==="A"?"🏆 GANADOR: AZUL":r.winner==="B"?"🏆 GANADOR: ROJO":"🤝 EMPATE";
+  const tournamentDraw=Boolean(gameState?.tournamentId&&gameState?.tournamentMatchId&&r.winner==="DRAW");
+  $("winnerText").textContent=tournamentDraw
+    ?"🤝 EMPATE: EL TORNEO NECESITA UN GANADOR"
+    :(r.winner==="A"?"🏆 GANADOR: AZUL":r.winner==="B"?"🏆 GANADOR: ROJO":"🤝 EMPATE");
   $("attackStats").textContent=`${Math.round(r.A.attack)} / ${Math.round(r.B.attack)}`;
   $("midStats").textContent=`${Math.round(r.A.midfield)} / ${Math.round(r.B.midfield)}`;
   $("defStats").textContent=`${Math.round(r.A.defense)} / ${Math.round(r.B.defense)}`;
@@ -3842,12 +3847,32 @@ function updateScreen(){
   }
 
   const revengeButton=$("revengeButton");
+  const tournamentDraw=Boolean(
+    hasResult && gameState?.tournamentId && gameState?.tournamentMatchId &&
+    gameState?.result?.winner==="DRAW" && !isSpectator
+  );
+  const tournamentFinished=Boolean(
+    hasResult && gameState?.tournamentId && gameState?.tournamentMatchId &&
+    gameState?.result?.winner!=="DRAW"
+  );
   if(revengeButton){
-    revengeButton.disabled=isSpectator || myTeam!=="A";
-    revengeButton.textContent=isSpectator
-      ?"👁 FIN DEL PARTIDO"
-      :(myTeam==="A"?"🔄 REVANCHA":"ESPERANDO REVANCHA DEL EQUIPO AZUL");
+    revengeButton.classList.toggle("hidden",tournamentFinished || (isSpectator&&Boolean(gameState?.tournamentId)));
+    if(tournamentDraw){
+      revengeButton.disabled=false;
+      revengeButton.textContent="🔄 JUGAR REVANCHA AHORA";
+    }else if(!tournamentFinished){
+      revengeButton.disabled=isSpectator || myTeam!=="A";
+      revengeButton.textContent=isSpectator
+        ?"👁 FIN DEL PARTIDO"
+        :(myTeam==="A"?"🔄 REVANCHA":"ESPERANDO REVANCHA DEL EQUIPO AZUL");
+    }
   }
+  const laterButton=$("tournamentLaterButton");
+  if(laterButton){
+    laterButton.classList.toggle("hidden",!tournamentDraw);
+    laterButton.disabled=!tournamentDraw;
+  }
+  $("tournamentDrawNotice")?.classList.toggle("hidden",!tournamentDraw);
 
   if(openedMiniTeam) renderMiniTeam(openedMiniTeam);
   renderMiniMatch();
@@ -4661,7 +4686,44 @@ $("passButton").addEventListener("click",passBid);
 rootMiniButtons().forEach(button=>{
   button.addEventListener("click",()=>chooseMiniLane(button.dataset.miniLane));
 });
-$("revengeButton").addEventListener("click",resetGame);
+async function chooseTournamentRematch(playNow){
+  const tournamentId=gameState?.tournamentId;
+  const matchId=gameState?.tournamentMatchId;
+  const finishedRoom=roomCode;
+  const finishedState=gameState;
+  if(!tournamentId || !matchId || finishedState?.result?.winner!=="DRAW") return;
+  const nowButton=$("revengeButton");
+  const laterButton=$("tournamentLaterButton");
+  if(nowButton) nowButton.disabled=true;
+  if(laterButton) laterButton.disabled=true;
+  try{
+    await ensureResultSynced(finishedRoom,finishedState);
+    if(playNow){
+      leaveRoom(true,false);
+      const result=await readyTournamentRematch(tournamentId,matchId);
+      if(!result?.roomCode){
+        setLobbyMessage(result?.message||"Estás pronto. Esperando que tu rival también elija jugar ahora.");
+      }
+    }else{
+      await postponeTournamentRematch(tournamentId,matchId);
+      leaveRoom(true,false);
+      setLobbyMessage("El cruce quedó pendiente. Podrán jugar la revancha más tarde.");
+    }
+  }catch(error){
+    console.error("No se pudo gestionar la revancha del torneo:",error);
+    if(nowButton) nowButton.disabled=false;
+    if(laterButton) laterButton.disabled=false;
+    alert(error?.message||"No se pudo gestionar la revancha del torneo.");
+  }
+}
+$("revengeButton").addEventListener("click",()=>{
+  if(gameState?.tournamentId&&gameState?.tournamentMatchId){
+    chooseTournamentRematch(true);
+  }else{
+    resetGame();
+  }
+});
+$("tournamentLaterButton")?.addEventListener("click",()=>chooseTournamentRematch(false));
 $("miniBriefingButton")?.addEventListener("click",dismissMiniBriefing);
 $("leaveRoomButton").addEventListener("click",async()=>{
   if(gameState?.result && !isSpectator){
