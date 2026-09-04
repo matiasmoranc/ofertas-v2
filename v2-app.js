@@ -155,6 +155,13 @@ export async function markTournamentMatchEntered(tournamentId,matchId,roomCode){
   });
   return result.data;
 }
+export async function sendMatchEmoji(roomCode,emoji){
+  if(!functions || !roomCode) throw new Error("No se pudo identificar la sala.");
+  const result=await httpsCallable(functions,"openTournamentMatch")({
+    action:"sendEmoji",roomCode,emoji
+  });
+  return result.data;
+}
 export async function forfeitTournamentMatch(tournamentId,matchId){
   if(!functions || !tournamentId || !matchId) return;
   return httpsCallable(functions,"openTournamentMatch")({tournamentId,matchId,action:"forfeit"});
