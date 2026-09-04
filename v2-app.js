@@ -153,6 +153,19 @@ export async function syncOfficialGameResult(roomCode){
   if(!functions || !roomCode) throw new Error("No se pudo identificar la sala.");
   return httpsCallable(functions,"openTournamentMatch")({roomCode,action:"syncResult"});
 }
+export async function readyTournamentRematch(tournamentId,matchId){
+  if(!functions || !tournamentId || !matchId) throw new Error("No se pudo identificar el cruce.");
+  return markTournamentReady(tournamentId,matchId);
+}
+export async function postponeTournamentRematch(tournamentId,matchId){
+  if(!functions || !tournamentId || !matchId) throw new Error("No se pudo identificar el cruce.");
+  const result=await httpsCallable(functions,"openTournamentMatch")({
+    tournamentId,matchId,action:"cancelReady"
+  });
+  tournamentRoomOpening="";
+  tournamentRoomPromise=null;
+  return result.data;
+}
 
 function el(id){ return document.getElementById(id); }
 function finishBootLoading(){
