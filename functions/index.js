@@ -310,12 +310,9 @@ function validOfficialResult(game,result){
       ((ga===3&&gb===0&&result.winner==="A"&&result.forfeitedBy===game.playerBUid) ||
        (ga===0&&gb===3&&result.winner==="B"&&result.forfeitedBy===game.playerAUid));
   }
-  const teamA=game.teams?.A, teamB=game.teams?.B;
-  /* El mercado puede terminar con menos de cinco jugadores si un equipo
-     se queda sin dinero. Es una partida válida siempre que ambos hayan
-     formado un plantel y ninguno supere el máximo de cinco. */
-  if(!Array.isArray(teamA) || !Array.isArray(teamB) ||
-     teamA.length<1 || teamB.length<1 || teamA.length>5 || teamB.length>5) return false;
+  /* Firebase puede serializar los planteles como arrays u objetos según
+     sus índices. El resultado se valida contra el marcador autoritativo
+     del mini partido, no contra la forma de serialización del plantel. */
   const ga=Number(result?.goalsA), gb=Number(result?.goalsB);
   if(!Number.isInteger(ga)||!Number.isInteger(gb)||ga<0||gb<0||ga>20||gb>20) return false;
   if(Number(game.miniMatch?.score?.A)!==ga || Number(game.miniMatch?.score?.B)!==gb) return false;
@@ -380,17 +377,12 @@ async function advanceTournament(game,result,winnerUid,winnerName){
   ]);
 }
 
-exports.recordOfficialResult=onValueCreated("/games/{room}/result",async event=>{
-  const room=event.params.room, result=event.data.val();
-  const game=(await event.data.ref.parent.get()).val();
+async function processOfficialGame(room,game,result){
   if(!validOfficialResult(game,result)){
     console.warn("Resultado rechazado",room);
-    await event.data.ref.remove();
-    await event.data.ref.parent.update({status:"playing",message:"⚠️ El resultado no superó la validación del servidor."});
-    return;
+    return {processed:false,reason:"invalid-result"};
   }
-  /* Cada revancha tiene su propio identificador. El código de sala se
-     conserva para la conexión, pero no se usa como clave única del historial. */
+
   const matchKey=cleanText(game.matchInstanceId,120)||room;
   const matchRef=db.ref(`matches/${matchKey}`);
   const created=await matchRef.transaction(current=>current||{
@@ -400,16 +392,39 @@ exports.recordOfficialResult=onValueCreated("/games/{room}/result",async event=>
     tournamentId:game.tournamentId||null,tournamentMatchId:game.tournamentMatchId||null,
     finishedAt:Date.now()
   });
-  if(!created.committed || created.snapshot.val().processed) return;
+  if(created.snapshot.val()?.processed) return {processed:false,reason:"already-processed"};
+
   const aWin=result.winner==="A", bWin=result.winner==="B";
   const common={finishedAt:Date.now(),tournamentId:game.tournamentId||null};
-  const tournamentName=game.tournamentId?(await db.ref(`tournaments/${game.tournamentId}/name`).get()).val():null;
+  const tournamentName=game.tournamentId?
+    (await db.ref(`tournaments/${game.tournamentId}/name`).get()).val():null;
+
   await Promise.all([
     applyUserResult(game.playerAUid,matchKey,{...common,roomCode:room,tournamentName,opponentUid:game.playerBUid,opponentName:game.playerBName||"Equipo Rojo",myGoals:result.goalsA,opponentGoals:result.goalsB,outcome:aWin?"win":bWin?"loss":"draw"},aWin?"win":bWin?"loss":"draw",result.goalsA,result.goalsB),
     applyUserResult(game.playerBUid,matchKey,{...common,roomCode:room,tournamentName,opponentUid:game.playerAUid,opponentName:game.playerAName||"Equipo Azul",myGoals:result.goalsB,opponentGoals:result.goalsA,outcome:bWin?"win":aWin?"loss":"draw"},bWin?"win":aWin?"loss":"draw",result.goalsB,result.goalsA)
   ]);
+
   const winnerUid=aWin?game.playerAUid:bWin?game.playerBUid:null;
   const winnerName=aWin?(game.playerAName||"Equipo Azul"):bWin?(game.playerBName||"Equipo Rojo"):null;
   await advanceTournament(game,result,winnerUid,winnerName);
   await matchRef.child("processed").set(true);
+  return {processed:true};
+}
+
+exports.recordOfficialResult=onValueCreated("/games/{room}/result",async event=>{
+  const room=event.params.room, result=event.data.val();
+  const game=(await event.data.ref.parent.get()).val();
+  await processOfficialGame(room,game,result);
+});
+
+exports.syncMyResults=onCall(async request=>{
+  const uid=requireAuth(request);
+  const games=(await db.ref("games").get()).val()||{};
+  let processed=0;
+  for(const [room,game] of Object.entries(games)){
+    if(!game?.result || ![game.playerAUid,game.playerBUid].includes(uid)) continue;
+    const outcome=await processOfficialGame(room,game,game.result);
+    if(outcome.processed) processed++;
+  }
+  return {ok:true,processed};
 });
