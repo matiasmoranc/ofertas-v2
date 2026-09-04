@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./v2.css?v=20260904-9">
+<link rel="stylesheet" href="./v2.css?v=20260904-10">
 <title>Mercado Élite 5 - Multiplayer</title>
 <style>
 *{
@@ -1998,6 +1998,19 @@ position: fixed;
   </div>
   <div id="spectatorToast" class="spectator-toast" aria-live="polite">👁 Entró un espectador</div>
 
+  <div id="emojiReactionOverlay" class="emoji-reaction-overlay" aria-live="polite"></div>
+  <div id="matchEmojiControls" class="match-emoji-controls hidden">
+    <div id="matchEmojiMenu" class="match-emoji-menu hidden" aria-label="Emojis del partido">
+      <button type="button" data-match-emoji="😂" aria-label="Enviar cara llorando de risa">😂</button>
+      <button type="button" data-match-emoji="👏" aria-label="Enviar aplausos">👏</button>
+      <button type="button" data-match-emoji="🤬" aria-label="Enviar cara enojada">🤬</button>
+      <button type="button" data-match-emoji="💩" aria-label="Enviar caca">💩</button>
+      <button type="button" data-match-emoji="🤝" aria-label="Enviar saludo">🤝</button>
+    </div>
+    <button id="matchEmojiToggle" class="match-emoji-toggle" type="button" aria-label="Abrir emojis" aria-expanded="false">💬</button>
+    <small id="matchEmojiStatus" class="match-emoji-status"></small>
+  </div>
+
   <section id="waitingOpponent" class="waiting-opponent hidden" aria-live="polite">
     <div class="waiting-opponent-icon">⏳</div>
     <h2>Esperando rival...</h2>
@@ -2205,7 +2218,7 @@ position: fixed;
 
 <script type="module">
 import { firebaseConfig } from "./firebase-config.js";
-import { startV2App, getV2Profile, forfeitTournamentMatch, markTournamentMatchEntered, syncOfficialGameResult, readyTournamentRematch, postponeTournamentRematch } from "./v2-app.js?v=20260904-19";
+import { startV2App, getV2Profile, forfeitTournamentMatch, markTournamentMatchEntered, sendMatchEmoji, syncOfficialGameResult, readyTournamentRematch, postponeTournamentRematch } from "./v2-app.js?v=20260904-20";
 import { getDatabase, ref, get, update, onValue, runTransaction, remove, set, onDisconnect } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
 
 /* =================================================
@@ -2452,6 +2465,10 @@ let spectatorPresenceRef = null;
 let spectatorDisconnectHandle = null;
 let lastSpectatorCount = null;
 let spectatorToastTimer = null;
+let lastEmojiEventId = "";
+let emojiReactionTimer = null;
+let emojiCooldownUntil = 0;
+let emojiCooldownTimer = null;
 const spectatorSessionId =
   (globalThis.crypto && crypto.randomUUID)
     ? crypto.randomUUID()
@@ -4521,6 +4538,43 @@ async function ensureResultSynced(code,state=gameState){
   return resultSyncPromise;
 }
 
+function closeEmojiMenu(){
+  $("matchEmojiMenu")?.classList.add("hidden");
+  const toggle=$("matchEmojiToggle");
+  if(toggle) toggle.setAttribute("aria-expanded","false");
+}
+
+function updateEmojiControls(){
+  const controls=$("matchEmojiControls");
+  if(!controls) return;
+  const canSend=!isSpectator && Boolean(myTeam) && gameState?.status==="playing" && !gameState?.result;
+  controls.classList.toggle("hidden",!canSend);
+  if(!canSend) closeEmojiMenu();
+}
+
+function showEmojiReaction(event){
+  if(!event?.id || event.id===lastEmojiEventId) return;
+  const overlay=$("emojiReactionOverlay");
+  if(!lastEmojiEventId){
+    lastEmojiEventId=event.id;
+    return;
+  }
+  lastEmojiEventId=event.id;
+  if(event.senderUid===uid && !isSpectator) return;
+  if(!overlay) return;
+  overlay.textContent=event.emoji;
+  overlay.classList.remove("show");
+  void overlay.offsetWidth;
+  overlay.classList.add("show");
+  if(emojiReactionTimer) clearTimeout(emojiReactionTimer);
+  emojiReactionTimer=setTimeout(()=>overlay.classList.remove("show"),1800);
+}
+
+function syncEmojiExperience(state){
+  updateEmojiControls();
+  showEmojiReaction(state?.emojiEvent);
+}
+
 function listenToRoom(code){
   if(unsubscribeGame) unsubscribeGame();
   listenToSpectators(code);
@@ -4541,6 +4595,8 @@ function listenToRoom(code){
     }else{
       myTeam=null;
     }
+
+    syncEmojiExperience(state);
 
     /* Las mesas públicas siguen visibles mientras se juega para que otros
        usuarios puedan entrar como espectadores. Al terminar, se quitan del lobby. */
@@ -4642,6 +4698,19 @@ function leaveRoom(clearUrl=true, closeActiveMatch=false){
     spectatorToastTimer=null;
   }
   if($("spectatorToast")) $("spectatorToast").classList.remove("show");
+  closeEmojiMenu();
+  $("matchEmojiControls")?.classList.add("hidden");
+  $("emojiReactionOverlay")?.classList.remove("show");
+  if(emojiReactionTimer){
+    clearTimeout(emojiReactionTimer);
+    emojiReactionTimer=null;
+  }
+  if(emojiCooldownTimer){
+    clearTimeout(emojiCooldownTimer);
+    emojiCooldownTimer=null;
+  }
+  lastEmojiEventId="";
+  emojiCooldownUntil=0;
 
   if(db && oldRoomCode && closeActiveMatch && wasActivePlayer){
     /* Un resultado terminado debe permanecer hasta que la función del
@@ -4732,6 +4801,41 @@ $("revengeButton").addEventListener("click",()=>{
 });
 $("tournamentLaterButton")?.addEventListener("click",()=>chooseTournamentRematch(false));
 $("miniBriefingButton")?.addEventListener("click",dismissMiniBriefing);
+$("matchEmojiToggle")?.addEventListener("click",()=>{
+  if(isSpectator || !gameState || gameState.status!=="playing" || gameState.result) return;
+  const menu=$("matchEmojiMenu");
+  const opening=menu.classList.contains("hidden");
+  menu.classList.toggle("hidden",!opening);
+  $("matchEmojiToggle").setAttribute("aria-expanded",String(opening));
+});
+
+document.querySelectorAll("[data-match-emoji]").forEach(button=>button.addEventListener("click",async()=>{
+  if(isSpectator || !roomCode || Date.now()<emojiCooldownUntil) return;
+  emojiCooldownUntil=Date.now()+3000;
+  closeEmojiMenu();
+  const status=$("matchEmojiStatus");
+  const emojiButtons=document.querySelectorAll("[data-match-emoji]");
+  emojiButtons.forEach(item=>item.disabled=true);
+  try{
+    await sendMatchEmoji(roomCode,button.dataset.matchEmoji);
+  }catch(error){
+    console.error("No se pudo enviar el emoji:",error);
+    if(status) status.textContent=error?.code==="functions/resource-exhausted"?"Esperá 3 segundos":"No se pudo enviar";
+  }
+  const restore=()=>{
+    const remaining=emojiCooldownUntil-Date.now();
+    if(remaining>0){
+      if(status) status.textContent=`Esperá ${Math.ceil(remaining/1000)}s`;
+      emojiCooldownTimer=setTimeout(restore,250);
+    }else{
+      emojiButtons.forEach(item=>item.disabled=false);
+      if(status) status.textContent="";
+      emojiCooldownTimer=null;
+    }
+  };
+  restore();
+}));
+
 $("leaveRoomButton").addEventListener("click",async()=>{
   if(gameState?.result && !isSpectator){
     const button=$("leaveRoomButton");
