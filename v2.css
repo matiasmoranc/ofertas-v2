@@ -398,3 +398,91 @@ body.dialog-open{overflow:hidden}
 }
 .rules-advantage-table td:nth-child(2){color:#baff42;font-weight:900}
 .rules-mini-explanation{margin-top:11px !important}
+
+
+/* Lobby dividido por tipo de partida */
+.lobby-mode-box{
+  margin-bottom:14px;
+  padding:16px;
+  border:1px solid rgba(255,255,255,.11);
+  border-radius:17px;
+  background:rgba(255,255,255,.035);
+}
+.lobby-mode-heading{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  margin-bottom:15px;
+}
+.lobby-mode-heading strong{
+  display:block;
+  color:#fff;
+  font-size:16px;
+}
+.lobby-mode-heading span{
+  display:block;
+  margin-top:4px;
+  color:#87988e;
+  font-size:11px;
+  line-height:1.35;
+}
+.lobby-field-label{
+  display:block;
+  margin:0 0 6px;
+  color:#899b90;
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:1.2px;
+}
+.lobby-button.compact{
+  min-height:42px;
+  margin-top:8px;
+  padding:11px 14px;
+  font-size:12px;
+}
+.lobby-button.private{
+  background:#baff42;
+  color:#07100b;
+}
+.lobby-subsection-title{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin:17px 0 9px;
+  padding-top:14px;
+  border-top:1px solid rgba(255,255,255,.08);
+}
+.lobby-subsection-title strong{
+  color:#9dafA3;
+  font-size:9px;
+  letter-spacing:1.1px;
+}
+.lobby-subsection-title span{color:#77887e;font-size:10px}
+.lobby-or-divider{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin:15px 0 9px;
+  color:#718278;
+  font-size:9px;
+  font-weight:900;
+  letter-spacing:.7px;
+}
+.lobby-or-divider:before,.lobby-or-divider:after{
+  content:"";
+  height:1px;
+  flex:1;
+  background:rgba(255,255,255,.09);
+}
+.room-input.compact-code{
+  padding:11px 13px;
+  font-size:18px;
+}
+@media(max-width:520px){
+  .lobby-wrap{
+    padding-bottom:calc(120px + env(safe-area-inset-bottom));
+  }
+  .lobby-card{padding:16px}
+  .lobby-mode-box{padding:14px}
+}
