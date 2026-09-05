@@ -367,3 +367,34 @@ body.dialog-open{overflow:hidden}
   .rules-modal-content section{padding:13px}
   .rules-modal-footer{padding:12px 14px 14px}
 }
+
+
+/* Tabla de ventajas del minijuego */
+.rules-table-help{margin-top:10px !important;font-size:11px !important}
+.rules-table-wrap{
+  margin-top:10px;
+  overflow-x:auto;
+  border:1px solid rgba(186,255,66,.18);
+  border-radius:11px;
+}
+.rules-advantage-table{
+  width:100%;
+  min-width:390px;
+  border-collapse:collapse;
+  text-align:center;
+  font-size:12px;
+}
+.rules-advantage-table th{
+  padding:9px 7px;
+  background:rgba(186,255,66,.1);
+  color:#d8ff90;
+  font-size:10px;
+  text-transform:uppercase;
+}
+.rules-advantage-table td{
+  padding:8px 7px;
+  border-top:1px solid rgba(255,255,255,.07);
+  color:#c8d2cb;
+}
+.rules-advantage-table td:nth-child(2){color:#baff42;font-weight:900}
+.rules-mini-explanation{margin-top:11px !important}
