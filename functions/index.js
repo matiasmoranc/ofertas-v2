@@ -435,6 +435,30 @@ exports.openTournamentMatch=onCall(async request=>{
     if(Date.now()-disconnectedAt<120000){
       throw new HttpsError("failed-precondition","Todavía no terminaron los 2 minutos de espera.");
     }
+
+    /* Una caída de conexión en una partida pública o privada anula el
+       encuentro: cerramos la sala sin generar estadísticas ni historial. */
+    if(!initial.tournamentId && !initial.tournamentMatchId){
+      const latest=(await gameRef.get()).val();
+      const latestOpponent=latest?.playerAUid===uid?latest?.playerBUid:latest?.playerAUid;
+      const latestPresence=latest?.playerPresence?.[latestOpponent];
+      if(
+        !latest ||
+        latest.result ||
+        latest.status!=="playing" ||
+        latestOpponent!==opponentUid ||
+        latestPresence?.online!==false ||
+        Number(latestPresence?.disconnectedAt||0)!==disconnectedAt
+      ){
+        throw new HttpsError("failed-precondition","La conexión o el estado de la partida cambió.");
+      }
+      await db.ref().update({
+        [`games/${code}`]:null,
+        [`openRooms/${code}`]:null
+      });
+      return {ok:true,cancelled:true};
+    }
+
     const forfeited=await gameRef.transaction(current=>{
       if(!current || current.result || current.status!=="playing") return;
       const currentOpponent=current.playerAUid===uid?current.playerBUid:current.playerAUid;
