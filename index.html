@@ -2562,6 +2562,7 @@ let unsubscribeOpenRooms = null;
 let currentRoomIsOpen = false;
 let latestOpenRooms = {};
 let openRoomsCleanupTimer = null;
+let pendingOpenRoomAction = "";
 
 let unsubscribeSpectators = null;
 let spectatorPresenceRef = null;
@@ -4381,8 +4382,28 @@ function renderOpenRooms(openRooms){
     const join=document.createElement("button");
     join.className="open-room-join";
     join.type="button";
-    join.textContent=isPlaying?"👁 MIRAR PARTIDO":"ENTRAR";
-    join.addEventListener("click",()=>isPlaying?watchOpenRoom(room.code):joinOpenRoom(room.code));
+    const actionPending=pendingOpenRoomAction===room.code;
+    join.disabled=actionPending;
+    join.textContent=actionPending
+      ?"ENTRANDO..."
+      :(isPlaying?"👁 MIRAR PARTIDO":"ENTRAR");
+    join.addEventListener("click",async ()=>{
+      /* Bloqueamos antes de la primera espera: si llega un segundo toque,
+         incluso después de que Firebase cambie el botón a MIRAR PARTIDO,
+         no puede abrir la misma sala como espectador. */
+      if(pendingOpenRoomAction) return;
+      pendingOpenRoomAction=room.code;
+      renderOpenRooms(latestOpenRooms);
+      try{
+        if(isPlaying) await watchOpenRoom(room.code);
+        else await joinOpenRoom(room.code);
+      }finally{
+        if(!roomCode){
+          pendingOpenRoomAction="";
+          renderOpenRooms(latestOpenRooms);
+        }
+      }
+    });
 
     item.appendChild(info);
     item.appendChild(join);
@@ -4941,6 +4962,7 @@ function showCreatedRoom(code){
 }
 
 function enterGameScreen(state){
+  pendingOpenRoomAction="";
   document.body.classList.remove("in-lobby");
   lobbyScreen.classList.add("screen-hidden");
   gameScreen.classList.remove("screen-hidden");
