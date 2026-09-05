@@ -505,3 +505,28 @@ body.dialog-open{overflow:hidden}
 }
 .whatsapp-share-button:hover{background:#1d4030;color:#fff}
 .whatsapp-share-button:disabled{opacity:.55;cursor:wait}
+
+
+/* Espera de revancha */
+.revenge-button.waiting-rematch{
+  white-space:normal;
+  line-height:1.2;
+}
+.revenge-button.waiting-rematch span{
+  display:block;
+  font-size:14px;
+}
+.revenge-button.waiting-rematch small{
+  display:block;
+  margin-top:5px;
+  color:inherit;
+  font-size:10px;
+  font-weight:700;
+  opacity:.85;
+}
+@media(max-width:520px){
+  .revenge-button.waiting-rematch{
+    padding:12px 10px;
+    min-height:58px;
+  }
+}
