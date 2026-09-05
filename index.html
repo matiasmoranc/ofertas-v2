@@ -3676,7 +3676,11 @@ async function resetGame(){
   await mutateGame((state,team)=>{
     if(team!=="A"){state.message="Solo el Equipo A puede reiniciar la partida.";return true;}
     const seed=nextSeed(state.rngSeed||Date.now());
+    const playerAName=state.playerAName;
+    const playerBName=state.playerBName;
     const reset=freshGameState(state.roomCode,state.playerAUid,state.playerBUid,seed);
+    reset.playerAName=playerAName||"Equipo Azul";
+    reset.playerBName=playerBName||"Equipo Rojo";
     Object.keys(state).forEach(k=>delete state[k]);
     Object.assign(state,reset);
     if(state.playerBUid) prepareNextAuctionInState(state,"🔄 Nueva partida.");
@@ -3855,9 +3859,17 @@ function drawShareTeam(ctx,{x,y,width,color,label,name,media,squad}){
   });
 }
 
+function dataUrlToBlob(dataUrl){
+  const [header,data]=dataUrl.split(",");
+  const mime=header.match(/data:([^;]+)/)?.[1]||"image/png";
+  const binary=atob(data);
+  const bytes=new Uint8Array(binary.length);
+  for(let index=0;index<binary.length;index++) bytes[index]=binary.charCodeAt(index);
+  return new Blob([bytes],{type:mime});
+}
+
 function buildResultShareImage(state){
-  return new Promise((resolve,reject)=>{
-    try{
+  try{
       const canvas=document.createElement("canvas");
       canvas.width=1080;
       canvas.height=1350;
@@ -3918,26 +3930,28 @@ function buildResultShareImage(state){
       ctx.fillStyle="rgba(255,255,255,.06)";
       ctx.fillRect(150,1288,780,2);
 
-      canvas.toBlob(blob=>{
-        if(blob) resolve(blob);
-        else reject(new Error("No se pudo crear la imagen."));
-      },"image/png",.96);
+      const dataUrl=canvas.toDataURL("image/png",.96);
+      return dataUrlToBlob(dataUrl);
     }catch(error){
-      reject(error);
+      throw error;
     }
-  });
 }
 
 async function shareResultOnWhatsApp(){
   if(!gameState?.result) return;
   const button=$("shareWhatsAppButton");
   const testFile=new File(["resultado"],"resultado.png",{type:"image/png"});
-  const canShareFile=Boolean(navigator.share&&navigator.canShare&&navigator.canShare({files:[testFile]}));
+  let canShareFile=false;
+  try{
+    canShareFile=Boolean(navigator.share&&navigator.canShare&&navigator.canShare({files:[testFile]}));
+  }catch(error){
+    console.warn("El navegador no pudo comprobar el uso compartido de archivos:",error);
+  }
   const fallbackWindow=canShareFile?null:window.open("about:blank","_blank");
   button.disabled=true;
   button.textContent="CREANDO IMAGEN…";
   try{
-    const blob=await buildResultShareImage(gameState);
+    const blob=buildResultShareImage(gameState);
     const file=new File([blob],`mercado-elite-${roomCode||"resultado"}.png`,{type:"image/png"});
     const result=gameState.result;
     const text=`⚽ Mercado Élite 5\n${gameState.playerAName||"Equipo Azul"} ${result.goalsA}–${result.goalsB} ${gameState.playerBName||"Equipo Rojo"}\n\nJugá en https://mercado5.web.app/`;
