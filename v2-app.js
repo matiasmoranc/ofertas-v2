@@ -18,6 +18,10 @@ const readyExpiryRequests=new Set();
 const tournamentExpansionOverrides=new Map();
 let adminSnapshotData=null;
 let adminActiveView="users";
+let leaderboardData=[];
+let leaderboardLoading=false;
+let latestHistoryData={};
+let latestHistoryStats={};
 
 async function openTournamentRoomOnce(code){
   if(!code) return;
@@ -308,6 +312,7 @@ function switchPanel(id){
   document.querySelectorAll(".account-panel").forEach(x=>x.classList.toggle("active",x.id===id));
   document.querySelectorAll(".dashboard-tab").forEach(x=>x.classList.toggle("active",x.dataset.panel===id));
   if(id==="adminPanel") loadAdminPanel();
+  if(id==="historyPanel") loadLeaderboard();
 }
 function statsOf(data){ return {played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,tournamentsWon:0,...(data||{})}; }
 function renderProfile(userData={}){
@@ -329,16 +334,40 @@ function renderProfile(userData={}){
       <div class="profile-stat"><strong>${avg}</strong><span>GOLES/PARTIDO</span></div>
       <div class="profile-stat tournament-stat"><strong>🏆 ${s.tournamentsWon}</strong><span>TORNEOS GANADOS</span></div>
     </div>`;
-  renderHistory(userData.history||{},s);
+  latestHistoryData=userData.history||{};
+  latestHistoryStats=s;
+  renderHistory(latestHistoryData,latestHistoryStats);
+  if(!leaderboardData.length) loadLeaderboard();
+}
+async function loadLeaderboard(){
+  if(!functions || leaderboardLoading) return;
+  leaderboardLoading=true;
+  renderHistory(latestHistoryData,latestHistoryStats);
+  try{
+    const response=await httpsCallable(functions,"openTournamentMatch")({action:"leaderboard"});
+    leaderboardData=Array.isArray(response.data?.players)?response.data.players:[];
+  }catch(error){
+    console.warn("No se pudo cargar el ranking:",error);
+  }finally{
+    leaderboardLoading=false;
+    renderHistory(latestHistoryData,latestHistoryStats);
+  }
 }
 function renderHistory(history,stats={}){
   const node=el("historyPanelContent"); if(!node) return;
   const matches=Object.values(history||{});
   const trophy=`<div class="tournament-wins-summary"><span>🏆</span><div><strong>${Number(stats.tournamentsWon||0)}</strong><small>TORNEOS GANADOS</small></div></div>`;
-  if(!matches.length){
-    node.innerHTML=trophy+'<div class="empty-state">Todavía no jugaste partidos registrados.</div>';
-    return;
-  }
+  const rankingRows=leaderboardData.map((player,index)=>`
+    <div class="ranking-row ${profile?.usernameKey===String(player.username||"").toLowerCase()?"is-me":""}">
+      <strong class="ranking-position">${index+1}</strong>
+      <span class="ranking-name">${esc(player.username||"Jugador")}</span>
+      <span class="ranking-record"><b>${Number(player.won||0)} G</b><i>${Number(player.drawn||0)} E</i><em>${Number(player.lost||0)} P</em></span>
+    </div>`).join("");
+  const ranking=`
+    <section class="history-ranking">
+      <div class="history-section-title"><strong>RANKING DE VICTORIAS</strong><span>G · E · P</span></div>
+      <div class="ranking-list">${rankingRows||(leaderboardLoading?'<div class="ranking-empty">Cargando ranking…</div>':'<div class="ranking-empty">Todavía no hay jugadores con partidos.</div>')}</div>
+    </section>`;
 
   const rivals={};
   matches.forEach(match=>{
@@ -355,18 +384,24 @@ function renderHistory(history,stats={}){
   });
 
   const items=Object.values(rivals).sort((a,b)=>b.lastPlayed-a.lastPlayed);
-  node.innerHTML=trophy+'<div class="history-list">'+items.map(rival=>`
-    <div class="history-item rivalry-item">
-      <div class="rivalry-head">
-        <strong>vs ${esc(rival.name)}</strong>
-        <span>${rival.total} ${rival.total===1?"partido":"partidos"}</span>
-      </div>
-      <div class="rivalry-record">
-        <div class="outcome-win"><strong>${rival.wins}</strong><span>GANADOS</span></div>
-        <div class="outcome-draw"><strong>${rival.draws}</strong><span>EMPATADOS</span></div>
-        <div class="outcome-loss"><strong>${rival.losses}</strong><span>PERDIDOS</span></div>
-      </div>
-    </div>`).join("")+"</div>";
+  const rivalry=items.length
+    ? `<section class="history-rivalries">
+        <div class="history-section-title"><strong>CONTRA TUS RIVALES</strong></div>
+        <div class="history-list">${items.map(rival=>`
+          <div class="history-item rivalry-item compact">
+            <div class="rivalry-head">
+              <strong>vs ${esc(rival.name)}</strong>
+              <span>${rival.total} PJ</span>
+            </div>
+            <div class="rivalry-record compact">
+              <span class="outcome-win"><b>${rival.wins}</b> G</span>
+              <span class="outcome-draw"><b>${rival.draws}</b> E</span>
+              <span class="outcome-loss"><b>${rival.losses}</b> P</span>
+            </div>
+          </div>`).join("")}</div>
+      </section>`
+    : '<div class="empty-state compact-empty">Todavía no jugaste partidos registrados.</div>';
+  node.innerHTML=trophy+ranking+rivalry;
 }
 async function adminRequest(action,data={}){
   if(!functions) throw new Error("Firebase todavía no está disponible.");
