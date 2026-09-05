@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./v2.css?v=20260905-18">
+<link rel="stylesheet" href="./v2.css?v=20260905-19">
 <title>Mercado Élite 5 - Multiplayer</title>
 <style>
 *{
@@ -1871,11 +1871,12 @@ header p{
   padding:0 4px;
 }
 .spectator-counter{
-position: fixed;
-    bottom: 15px;
-    /* z-index: 47; */
-    left: 14px;
-    display: inline-table;
+    position:fixed;
+    right:16px;
+    bottom:calc(14px + env(safe-area-inset-bottom));
+    left:auto;
+    z-index:79;
+    display:flex;
     align-items: center;
     gap: 3px;
     padding: 3px 6px;
