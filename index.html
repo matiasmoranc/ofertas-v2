@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./v2.css?v=20260905-15">
+<link rel="stylesheet" href="./v2.css?v=20260905-16">
 <title>Mercado Élite 5 - Multiplayer</title>
 <style>
 *{
@@ -1953,20 +1953,20 @@ position: fixed;
 <section id="lobbyScreen" class="lobby-wrap">
   <div class="lobby-card">
     <div id="firebaseStatus" class="firebase-status" style="display:none;"></div>
-    <button id="createRoomButton" class="lobby-button" type="button">🔒 CREAR PARTIDA PRIVADA</button>
 
-    <div class="open-room-box">
-      <div class="open-room-title">
-        <strong>🌐 Crear mesa abierta</strong>
-        <span>Visible para todos</span>
+    <div class="lobby-mode-box">
+      <div class="lobby-mode-heading">
+        <div>
+          <strong>🌐 Mesa pública</strong>
+          <span>Creá una mesa visible o unite a una disponible</span>
+        </div>
       </div>
-      <input id="tableNameInput" class="table-name-input" maxlength="28" autocomplete="off" placeholder="Nombre Sala">
-      <button id="createOpenRoomButton" class="lobby-button secondary" type="button">PUBLICAR MESA ABIERTA</button>
-    </div>
+      <label class="lobby-field-label" for="tableNameInput">CREAR MESA PÚBLICA</label>
+      <input id="tableNameInput" class="table-name-input" maxlength="28" autocomplete="off" placeholder="Nombre de la mesa">
+      <button id="createOpenRoomButton" class="lobby-button secondary compact" type="button">PUBLICAR MESA</button>
 
-    <div class="open-room-box">
-      <div class="open-room-title">
-        <strong>🟢 Mesas abiertas</strong>
+      <div class="lobby-subsection-title">
+        <strong>MESAS DISPONIBLES</strong>
         <span id="openRoomsCount">0 disponibles</span>
       </div>
       <div id="openRoomsList" class="open-rooms-list">
@@ -1974,9 +1974,20 @@ position: fixed;
       </div>
     </div>
 
-    <div class="lobby-separator">O UNIRSE CON CÓDIGO</div>
-    <input id="roomCodeInput" class="room-input" maxlength="6" autocomplete="off" placeholder="ABC123">
-    <button id="joinRoomButton" class="lobby-button secondary" type="button">UNIRSE A PARTIDA</button>
+    <div class="lobby-mode-box">
+      <div class="lobby-mode-heading">
+        <div>
+          <strong>🔒 Partida privada</strong>
+          <span>Creá una sala o ingresá el código de tu rival</span>
+        </div>
+      </div>
+      <button id="createRoomButton" class="lobby-button private compact" type="button">CREAR PARTIDA PRIVADA</button>
+
+      <div class="lobby-or-divider">O INGRESÁ UN CÓDIGO</div>
+      <input id="roomCodeInput" class="room-input compact-code" maxlength="6" autocomplete="off" placeholder="ABC123">
+      <button id="joinRoomButton" class="lobby-button secondary compact" type="button">UNIRSE A PARTIDA</button>
+    </div>
+
     <div id="lobbyMessage" class="message">Conectando...</div>
     <div id="roomReady" class="room-ready screen-hidden">
       <div>Código de la partida</div>
