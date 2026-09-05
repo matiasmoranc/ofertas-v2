@@ -187,6 +187,24 @@ exports.joinTournament=onCall(async request=>{
 exports.openTournamentMatch=onCall(async request=>{
   const uid=requireAuth(request);
 
+  if(request.data?.action==="leaderboard"){
+    const users=(await db.ref("users").get()).val()||{};
+    const players=Object.values(users).map(user=>({
+      username:cleanText(user?.profile?.username||"Jugador",40),
+      won:Number(user?.stats?.won||0),
+      drawn:Number(user?.stats?.drawn||0),
+      lost:Number(user?.stats?.lost||0),
+      played:Number(user?.stats?.played||0)
+    })).filter(player=>player.played>0)
+      .sort((a,b)=>
+        b.won-a.won ||
+        b.drawn-a.drawn ||
+        a.lost-b.lost ||
+        a.username.localeCompare(b.username)
+      )
+      .slice(0,20);
+    return {players};
+  }
 
   if(String(request.data?.action||"").startsWith("admin")){
     await requireAdmin(uid);
