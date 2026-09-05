@@ -587,27 +587,26 @@ body.dialog-open{overflow:hidden}
   letter-spacing:1px;
 }
 .team-jersey{
-  position:relative;
   display:block;
   flex:0 0 auto;
-  width:38px;
-  height:34px;
-  clip-path:polygon(23% 0,39% 0,43% 9%,57% 9%,61% 0,77% 0,100% 24%,82% 43%,74% 35%,74% 100%,26% 100%,26% 35%,18% 43%,0 24%);
+  width:34px;
+  height:30px;
 }
-.team-jersey:before{
-  content:"";
-  position:absolute;
-  top:-1px;
-  left:50%;
-  width:11px;
-  height:7px;
-  border-radius:0 0 7px 7px;
-  background:#102219;
-  transform:translateX(-50%);
+.team-jersey svg{
+  display:block;
+  width:100%;
+  height:100%;
+  overflow:visible;
 }
-.team-jersey:after{display:none}
-.blue .team-jersey{background:#2f8fd3}
-.red .team-jersey{background:#d94052}
+.team-jersey path{
+  fill:none;
+  stroke:currentColor;
+  stroke-width:2.4;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.blue .team-jersey{color:#4aaeff}
+.red .team-jersey{color:#ff6073}
 .player-team-heading{
   display:flex !important;
   align-items:center;
@@ -631,7 +630,6 @@ body.dialog-open{overflow:hidden}
 @media(max-width:520px){
   .result-media-versus{gap:6px}
   .result-media-team{gap:7px;padding:9px 7px}
-  .result-media-team .team-jersey{width:30px;height:27px}
   .result-media-team strong{font-size:21px}
   .result-media-vs{font-size:8px}
 }
