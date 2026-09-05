@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./v2.css?v=20260905-21">
+<link rel="stylesheet" href="./v2.css?v=20260905-22">
 <title>Mercado Élite 5 - Multiplayer</title>
 <style>
 *{
@@ -2295,14 +2295,14 @@ header p{
     <div id="playerValuesWrap" class="player-values-wrap">
       <div class="player-values-team">
         <h3 class="player-team-heading blue">
-          <span class="team-crest">AZ</span>
+          <span class="team-jersey" aria-hidden="true"></span>
           <span><strong>EQUIPO AZUL</strong><small>Valores de jugadores</small></span>
         </h3>
         <div id="playerValuesA"></div>
       </div>
       <div class="player-values-team">
         <h3 class="player-team-heading red">
-          <span class="team-crest">RO</span>
+          <span class="team-jersey" aria-hidden="true"></span>
           <span><strong>EQUIPO ROJO</strong><small>Valores de jugadores</small></span>
         </h3>
         <div id="playerValuesB"></div>
@@ -4014,13 +4014,13 @@ function renderResult(){
     <span class="result-media-label">MEDIA DE LOS EQUIPOS</span>
     <span class="result-media-versus">
       <span class="result-media-team blue">
-        <span class="team-crest">AZ</span>
+        <span class="team-jersey" aria-hidden="true"></span>
         <span><small>AZUL</small><strong>${mediaA.toFixed(1)}</strong></span>
       </span>
       <span class="result-media-vs">VS</span>
       <span class="result-media-team red">
         <span><small>ROJO</small><strong>${mediaB.toFixed(1)}</strong></span>
-        <span class="team-crest">RO</span>
+        <span class="team-jersey" aria-hidden="true"></span>
       </span>
     </span>`;
   $("goalScorersA").textContent=r.goalsA ? formatGoalScorers(r.scorersA) : "";
