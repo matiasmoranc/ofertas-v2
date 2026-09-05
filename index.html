@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./v2.css?v=20260905-19">
+<link rel="stylesheet" href="./v2.css?v=20260905-20">
 <title>Mercado Élite 5 - Multiplayer</title>
 <style>
 *{
@@ -4212,13 +4212,20 @@ function updateScreen(){
   if(revengeButton){
     revengeButton.classList.toggle("hidden",tournamentFinished || (isSpectator&&Boolean(gameState?.tournamentId)));
     if(tournamentDraw){
+      revengeButton.classList.remove("waiting-rematch");
       revengeButton.disabled=false;
       revengeButton.textContent="🔄 JUGAR REVANCHA AHORA";
     }else if(!tournamentFinished){
+      const waitingForBlue=!isSpectator && myTeam!=="A";
+      revengeButton.classList.toggle("waiting-rematch",waitingForBlue);
       revengeButton.disabled=isSpectator || myTeam!=="A";
-      revengeButton.textContent=isSpectator
-        ?"👁 FIN DEL PARTIDO"
-        :(myTeam==="A"?"🔄 REVANCHA":"ESPERANDO REVANCHA DEL EQUIPO AZUL");
+      if(isSpectator){
+        revengeButton.textContent="👁 FIN DEL PARTIDO";
+      }else if(myTeam==="A"){
+        revengeButton.textContent="🔄 REVANCHA";
+      }else{
+        revengeButton.innerHTML="<span>⏳ ESPERANDO REVANCHA</span><small>El equipo azul debe iniciarla</small>";
+      }
     }
   }
   const laterButton=$("tournamentLaterButton");
