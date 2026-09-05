@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./v2.css?v=20260905-17">
+<link rel="stylesheet" href="./v2.css?v=20260905-18">
 <title>Mercado Élite 5 - Multiplayer</title>
 <style>
 *{
@@ -3828,7 +3828,7 @@ function drawShareTeam(ctx,{x,y,width,color,label,name,media,squad}){
   ctx.fillText(label,x+30,y+52);
 
   ctx.fillStyle="#ffffff";
-  ctx.font="800 38px Arial";
+  ctx.font="800 46px Arial";
   const displayName=String(name||label).slice(0,18);
   ctx.fillText(displayName,x+30,y+105);
 
@@ -3889,7 +3889,7 @@ function buildResultShareImage(state){
       const nameA=state.playerAName||"Equipo Azul";
       const nameB=state.playerBName||"Equipo Rojo";
       ctx.fillStyle="#62b7ff";
-      ctx.font="800 31px Arial";
+      ctx.font="800 42px Arial";
       ctx.textAlign="right";
       ctx.fillText(String(nameA).slice(0,18),440,220);
       ctx.fillStyle="#ffffff";
@@ -3897,7 +3897,7 @@ function buildResultShareImage(state){
       ctx.textAlign="center";
       ctx.fillText(`${result.goalsA}  –  ${result.goalsB}`,540,292);
       ctx.fillStyle="#ff7182";
-      ctx.font="800 31px Arial";
+      ctx.font="800 42px Arial";
       ctx.textAlign="left";
       ctx.fillText(String(nameB).slice(0,18),640,220);
 
