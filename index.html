@@ -6,7 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./v2.css?v=20260905-16">
+<link rel="stylesheet" href="./v2.css?v=20260905-17">
 <title>Mercado Élite 5 - Multiplayer</title>
 <style>
 *{
@@ -2302,6 +2302,8 @@ position: fixed;
       </div>
     </div>
 
+    <button id="shareWhatsAppButton" class="whatsapp-share-button" type="button">📲 COMPARTIR RESULTADO</button>
+
     <div id="tournamentDrawNotice" class="hidden" style="margin:16px 0 10px;color:#ffd454;font-weight:700;line-height:1.45;">El partido terminó empatado y el torneo necesita un ganador. La revancha comenzará cuando ambos elijan jugar ahora.</div>
     <button id="revengeButton" class="revenge-button" type="button">🔄 REVANCHA</button>
     <button id="tournamentLaterButton" class="reset-button hidden" type="button" style="margin-top:10px;background:rgba(255,255,255,.08);color:white;">JUGAR LUEGO</button>
@@ -3794,6 +3796,192 @@ function renderPlayerValues(team){
     </table>`;
 }
 
+function shareSquad(state,team){
+  return teamEntries(state,team).map(entry=>{
+    const player=players[entry.playerIndex];
+    return player?{name:player.name,pos:player.pos,rating:player.rating}:null;
+  }).filter(Boolean);
+}
+
+function canvasRoundRect(ctx,x,y,width,height,radius){
+  const r=Math.min(radius,width/2,height/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+width,y,x+width,y+height,r);
+  ctx.arcTo(x+width,y+height,x,y+height,r);
+  ctx.arcTo(x,y+height,x,y,r);
+  ctx.arcTo(x,y,x+width,y,r);
+  ctx.closePath();
+}
+
+function drawShareTeam(ctx,{x,y,width,color,label,name,media,squad}){
+  ctx.fillStyle="rgba(255,255,255,.055)";
+  ctx.strokeStyle=color;
+  ctx.lineWidth=3;
+  canvasRoundRect(ctx,x,y,width,690,28);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign="left";
+  ctx.fillStyle=color;
+  ctx.font="800 30px Arial";
+  ctx.fillText(label,x+30,y+52);
+
+  ctx.fillStyle="#ffffff";
+  ctx.font="800 38px Arial";
+  const displayName=String(name||label).slice(0,18);
+  ctx.fillText(displayName,x+30,y+105);
+
+  ctx.fillStyle="#9eafa5";
+  ctx.font="700 24px Arial";
+  ctx.fillText("MEDIA DEL EQUIPO",x+30,y+157);
+  ctx.fillStyle="#baff42";
+  ctx.font="900 54px Arial";
+  ctx.fillText(Number(media||0).toFixed(1),x+30,y+216);
+
+  ctx.fillStyle="#809188";
+  ctx.font="800 22px Arial";
+  ctx.fillText("PLANTEL",x+30,y+275);
+
+  squad.forEach((player,index)=>{
+    const rowY=y+330+(index*66);
+    ctx.fillStyle="rgba(0,0,0,.18)";
+    canvasRoundRect(ctx,x+24,rowY-38,width-48,53,12);
+    ctx.fill();
+    ctx.fillStyle=color;
+    ctx.font="900 21px Arial";
+    ctx.fillText(player.pos,x+42,rowY-3);
+    ctx.fillStyle="#ffffff";
+    ctx.font="700 23px Arial";
+    const maxName=String(player.name).length>23?String(player.name).slice(0,22)+"…":player.name;
+    ctx.fillText(maxName,x+92,rowY-3);
+    ctx.textAlign="right";
+    ctx.fillStyle="#d8ff90";
+    ctx.font="900 22px Arial";
+    ctx.fillText(String(player.rating),x+width-42,rowY-3);
+    ctx.textAlign="left";
+  });
+}
+
+function buildResultShareImage(state){
+  return new Promise((resolve,reject)=>{
+    try{
+      const canvas=document.createElement("canvas");
+      canvas.width=1080;
+      canvas.height=1350;
+      const ctx=canvas.getContext("2d");
+      const gradient=ctx.createLinearGradient(0,0,0,1350);
+      gradient.addColorStop(0,"#153b27");
+      gradient.addColorStop(.55,"#091a11");
+      gradient.addColorStop(1,"#030906");
+      ctx.fillStyle=gradient;
+      ctx.fillRect(0,0,1080,1350);
+
+      ctx.textAlign="center";
+      ctx.fillStyle="#baff42";
+      ctx.font="900 27px Arial";
+      ctx.fillText("MERCADO ÉLITE 5",540,76);
+      ctx.fillStyle="#ffffff";
+      ctx.font="900 50px Arial";
+      ctx.fillText("RESULTADO FINAL",540,140);
+
+      const result=state.result;
+      const nameA=state.playerAName||"Equipo Azul";
+      const nameB=state.playerBName||"Equipo Rojo";
+      ctx.fillStyle="#62b7ff";
+      ctx.font="800 31px Arial";
+      ctx.textAlign="right";
+      ctx.fillText(String(nameA).slice(0,18),440,220);
+      ctx.fillStyle="#ffffff";
+      ctx.font="900 72px Arial";
+      ctx.textAlign="center";
+      ctx.fillText(`${result.goalsA}  –  ${result.goalsB}`,540,292);
+      ctx.fillStyle="#ff7182";
+      ctx.font="800 31px Arial";
+      ctx.textAlign="left";
+      ctx.fillText(String(nameB).slice(0,18),640,220);
+
+      const mediaA=teamRatingAverageFromState(state,"A");
+      const mediaB=teamRatingAverageFromState(state,"B");
+      drawShareTeam(ctx,{x:55,y:350,width:465,color:"#62b7ff",label:"EQUIPO AZUL",name:nameA,media:mediaA,squad:shareSquad(state,"A")});
+      drawShareTeam(ctx,{x:560,y:350,width:465,color:"#ff7182",label:"EQUIPO ROJO",name:nameB,media:mediaB,squad:shareSquad(state,"B")});
+
+      ctx.textAlign="center";
+      ctx.fillStyle="#ffffff";
+      ctx.font="800 29px Arial";
+      const outcome=result.winner==="A"
+        ?`🏆 Ganó ${nameA}`
+        :result.winner==="B"
+          ?`🏆 Ganó ${nameB}`
+          :"🤝 Empate";
+      ctx.fillText(outcome,540,1110);
+
+      ctx.fillStyle="#91a198";
+      ctx.font="600 25px Arial";
+      ctx.fillText("¿Podés armar un equipo mejor?",540,1195);
+      ctx.fillStyle="#baff42";
+      ctx.font="800 29px Arial";
+      ctx.fillText("mercado5.web.app",540,1243);
+
+      ctx.fillStyle="rgba(255,255,255,.06)";
+      ctx.fillRect(150,1288,780,2);
+
+      canvas.toBlob(blob=>{
+        if(blob) resolve(blob);
+        else reject(new Error("No se pudo crear la imagen."));
+      },"image/png",.96);
+    }catch(error){
+      reject(error);
+    }
+  });
+}
+
+async function shareResultOnWhatsApp(){
+  if(!gameState?.result) return;
+  const button=$("shareWhatsAppButton");
+  const testFile=new File(["resultado"],"resultado.png",{type:"image/png"});
+  const canShareFile=Boolean(navigator.share&&navigator.canShare&&navigator.canShare({files:[testFile]}));
+  const fallbackWindow=canShareFile?null:window.open("about:blank","_blank");
+  button.disabled=true;
+  button.textContent="CREANDO IMAGEN…";
+  try{
+    const blob=await buildResultShareImage(gameState);
+    const file=new File([blob],`mercado-elite-${roomCode||"resultado"}.png`,{type:"image/png"});
+    const result=gameState.result;
+    const text=`⚽ Mercado Élite 5\n${gameState.playerAName||"Equipo Azul"} ${result.goalsA}–${result.goalsB} ${gameState.playerBName||"Equipo Rojo"}\n\nJugá en https://mercado5.web.app/`;
+
+    if(canShareFile){
+      await navigator.share({
+        title:"Resultado de Mercado Élite 5",
+        text,
+        files:[file]
+      });
+    }else{
+      const imageUrl=URL.createObjectURL(blob);
+      const link=document.createElement("a");
+      link.href=imageUrl;
+      link.download=file.name;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(()=>URL.revokeObjectURL(imageUrl),15000);
+      const whatsappUrl=`https://wa.me/?text=${encodeURIComponent(text)}`;
+      if(fallbackWindow) fallbackWindow.location.href=whatsappUrl;
+      else window.open(whatsappUrl,"_blank");
+      await window.gameAlert("Imagen descargada","WhatsApp se abrió con el resultado y el enlace. Adjuntá la imagen que se descargó automáticamente.");
+    }
+  }catch(error){
+    if(fallbackWindow&&!fallbackWindow.closed) fallbackWindow.close();
+    if(error?.name!=="AbortError"){
+      console.error("No se pudo compartir el resultado:",error);
+      await window.gameAlert("No se pudo compartir","No se pudo generar o enviar la imagen del resultado.");
+    }
+  }finally{
+    button.disabled=false;
+    button.textContent="📲 COMPARTIR RESULTADO";
+  }
+}
+
 function renderResult(){
   const r=gameState?.result;
   if(!r){$("resultCard").classList.add("hidden");return;}
@@ -5094,6 +5282,7 @@ async function chooseTournamentRematch(playNow){
     await window.gameAlert("No se pudo continuar",error?.message||"No se pudo gestionar la revancha del torneo.");
   }
 }
+$("shareWhatsAppButton")?.addEventListener("click",shareResultOnWhatsApp);
 $("revengeButton").addEventListener("click",()=>{
   if(gameState?.tournamentId&&gameState?.tournamentMatchId){
     chooseTournamentRematch(true);
