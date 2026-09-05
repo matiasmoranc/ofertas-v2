@@ -590,34 +590,24 @@ body.dialog-open{overflow:hidden}
   position:relative;
   display:block;
   flex:0 0 auto;
-  width:44px;
-  height:40px;
-  clip-path:polygon(24% 0,39% 0,43% 10%,57% 10%,61% 0,76% 0,100% 22%,84% 47%,76% 37%,76% 100%,24% 100%,24% 37%,16% 47%,0 22%);
-  filter:drop-shadow(0 5px 6px rgba(0,0,0,.32));
+  width:38px;
+  height:34px;
+  clip-path:polygon(23% 0,39% 0,43% 9%,57% 9%,61% 0,77% 0,100% 24%,82% 43%,74% 35%,74% 100%,26% 100%,26% 35%,18% 43%,0 24%);
 }
 .team-jersey:before{
   content:"";
   position:absolute;
   top:-1px;
   left:50%;
-  width:13px;
-  height:8px;
-  border-radius:0 0 9px 9px;
-  background:rgba(4,14,9,.72);
+  width:11px;
+  height:7px;
+  border-radius:0 0 7px 7px;
+  background:#102219;
   transform:translateX(-50%);
 }
-.team-jersey:after{
-  content:"";
-  position:absolute;
-  inset:0;
-  background:linear-gradient(115deg,rgba(255,255,255,.2),transparent 38%,rgba(0,0,0,.14));
-}
-.blue .team-jersey{
-  background:linear-gradient(160deg,#59b7ff 0%,#1676c8 58%,#064d91 100%);
-}
-.red .team-jersey{
-  background:linear-gradient(160deg,#ff7182 0%,#d6243d 58%,#921025 100%);
-}
+.team-jersey:after{display:none}
+.blue .team-jersey{background:#2f8fd3}
+.red .team-jersey{background:#d94052}
 .player-team-heading{
   display:flex !important;
   align-items:center;
@@ -635,14 +625,13 @@ body.dialog-open{overflow:hidden}
   letter-spacing:.7px;
 }
 .player-team-heading .team-jersey{
-  width:34px;
-  height:39px;
-  font-size:9px;
+  width:32px;
+  height:29px;
 }
 @media(max-width:520px){
   .result-media-versus{gap:6px}
   .result-media-team{gap:7px;padding:9px 7px}
-  .result-media-team .team-jersey{width:31px;height:37px;font-size:8px}
+  .result-media-team .team-jersey{width:30px;height:27px}
   .result-media-team strong{font-size:21px}
   .result-media-vs{font-size:8px}
 }
