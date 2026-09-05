@@ -486,3 +486,22 @@ body.dialog-open{overflow:hidden}
   .lobby-card{padding:16px}
   .lobby-mode-box{padding:14px}
 }
+
+
+/* Compartir resultado */
+.whatsapp-share-button{
+  width:100%;
+  margin:16px 0 2px;
+  padding:14px 16px;
+  border:1px solid rgba(37,211,102,.48);
+  border-radius:14px;
+  background:#1d9d50;
+  color:#fff;
+  font-size:13px;
+  font-weight:900;
+  letter-spacing:.4px;
+  cursor:pointer;
+  box-shadow:0 8px 22px rgba(0,0,0,.24);
+}
+.whatsapp-share-button:hover{background:#22b75d}
+.whatsapp-share-button:disabled{opacity:.55;cursor:wait}
