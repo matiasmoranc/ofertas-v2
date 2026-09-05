@@ -633,3 +633,30 @@ body.dialog-open{overflow:hidden}
   .result-media-team strong{font-size:21px}
   .result-media-vs{font-size:8px}
 }
+
+
+/* Ranking general e historial compacto */
+.history-ranking,.history-rivalries{margin-top:13px}
+.history-section-title{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 2px 7px;color:#9caf9f;font-size:9px;font-weight:900;letter-spacing:1px}
+.history-section-title span{color:#718278;font-size:8px}
+.ranking-list{overflow:hidden;border:1px solid rgba(255,255,255,.09);border-radius:13px;background:rgba(0,0,0,.18)}
+.ranking-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;align-items:center;gap:7px;min-height:39px;padding:7px 10px;border-top:1px solid rgba(255,255,255,.06)}
+.ranking-row:first-child{border-top:0}
+.ranking-row.is-me{background:rgba(186,255,66,.08)}
+.ranking-position{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.08);color:#aebdb4;font-size:10px}
+.ranking-row:nth-child(1) .ranking-position{background:#ffd45c;color:#251b00}
+.ranking-row:nth-child(2) .ranking-position{background:#b9c2c8;color:#142027}
+.ranking-row:nth-child(3) .ranking-position{background:#b97845;color:#211006}
+.ranking-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:800}
+.ranking-record{display:flex;gap:7px;white-space:nowrap;font-size:10px;font-style:normal}
+.ranking-record b{color:#baff42}.ranking-record i{color:#ffd45c;font-style:normal}.ranking-record em{color:#ff8585;font-style:normal}
+.ranking-empty{padding:15px;text-align:center;color:#819188;font-size:11px}
+.rivalry-item.compact{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:9px;padding:9px 11px}
+.rivalry-item.compact .rivalry-head{min-width:0;gap:7px}
+.rivalry-item.compact .rivalry-head>strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.rivalry-item.compact .rivalry-head>span{white-space:nowrap;font-size:8px}
+.rivalry-record.compact{display:flex;gap:8px;white-space:nowrap}
+.rivalry-record.compact>span{font-size:10px}
+.rivalry-record.compact b{font-size:13px}
+.compact-empty{padding:15px 10px}
+@media(max-width:380px){.ranking-record{gap:5px;font-size:9px}.rivalry-item.compact{grid-template-columns:1fr}.rivalry-record.compact{justify-content:flex-start}}
