@@ -4611,9 +4611,14 @@ function syncOpponentConnection(state){
     $("reconnectTitle").textContent=isSpectator
       ?`${playerName} perdió la conexión`
       :"Tu rival perdió la conexión";
+    const connectionCancelsMatch=!state.tournamentId && !state.tournamentMatchId;
     $("reconnectMessage").textContent=remaining>0
-      ?"El partido está pausado. Puede volver antes de perder 3–0."
-      :"Tiempo agotado. Registrando el resultado…";
+      ?(connectionCancelsMatch
+        ?"El partido está pausado. Tiene 2 minutos para volver."
+        :"El partido está pausado. Puede volver antes de perder 3–0.")
+      :(connectionCancelsMatch
+        ?"Tiempo agotado. Cerrando la partida sin resultado…"
+        :"Tiempo agotado. Registrando el resultado…");
     $("reconnectCountdown").textContent=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,"0")}`;
     if(remaining<=0){
       clearDisconnectTimers();
