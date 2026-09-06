@@ -3901,11 +3901,11 @@ function drawShareTeam(ctx,{x,y,width,color,label,name,media,attacks,advances,sq
 
   ctx.textAlign="right";
   ctx.fillStyle=color;
-  ctx.font="900 29px Arial";
-  ctx.fillText(String(advances),x+width-154,y+282);
-  ctx.fillStyle="#dce6e0";
-  ctx.font="800 19px Arial";
-  ctx.fillText("AVANCES AL GOL",x+width-42,y+282);
+  ctx.font="900 25px Arial";
+  ctx.fillText(`${advances} AVANCES`,x+width-42,y+274);
+  ctx.fillStyle="#a9b8b0";
+  ctx.font="800 14px Arial";
+  ctx.fillText("PARA LLEGAR AL GOL",x+width-42,y+298);
   ctx.textAlign="left";
 
   ctx.fillStyle="#809188";
