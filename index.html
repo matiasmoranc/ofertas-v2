@@ -2049,6 +2049,17 @@ header p{
     </article>
   </div>
 
+  <div id="gameDialog" class="game-dialog-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="gameDialogTitle">
+    <div class="game-dialog-card">
+      <h2 id="gameDialogTitle">Confirmar</h2>
+      <p id="gameDialogMessage"></p>
+      <div class="game-dialog-actions">
+        <button id="gameDialogCancel" type="button" class="game-dialog-cancel">Cancelar</button>
+        <button id="gameDialogConfirm" type="button" class="game-dialog-confirm">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
 <section id="gameScreen" class="screen-hidden">
   <div id="connectionBar" class="connection-bar">
     <div><span id="connectionDot" class="connection-dot"></span><span id="connectionText">Conectando...</span></div>
@@ -2065,17 +2076,6 @@ header p{
     <span id="reconnectMessage">Esperando que el jugador vuelva…</span>
     <b id="reconnectCountdown">2:00</b>
   </aside>
-
-  <div id="gameDialog" class="game-dialog-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="gameDialogTitle">
-    <div class="game-dialog-card">
-      <h2 id="gameDialogTitle">Confirmar</h2>
-      <p id="gameDialogMessage"></p>
-      <div class="game-dialog-actions">
-        <button id="gameDialogCancel" type="button" class="game-dialog-cancel">Cancelar</button>
-        <button id="gameDialogConfirm" type="button" class="game-dialog-confirm">Aceptar</button>
-      </div>
-    </div>
-  </div>
 
   <div id="emojiReactionOverlay" class="emoji-reaction-overlay" aria-live="polite"></div>
   <div id="matchEmojiControls" class="match-emoji-controls hidden">
