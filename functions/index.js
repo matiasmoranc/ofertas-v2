@@ -268,8 +268,9 @@ exports.openTournamentMatch=onCall(async request=>{
         [`users/${targetUid}/stats`]:{
           played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,tournamentsWon:cups
         },
-        [`users/${targetUid}/history`]:null,
-        [`users/${targetUid}/appliedMatches`]:null
+        [`users/${targetUid}/history`]:null
+        /* appliedMatches se conserva para que los resultados antiguos no
+           vuelvan a contabilizarse después del reinicio. */
       });
       return {ok:true};
     }
