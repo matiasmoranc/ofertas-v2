@@ -8,13 +8,27 @@
 <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./v2.css?v=20260905-25">
 <title>Mercado Élite 5 - Multiplayer</title>
+<script>
+/* Safari iOS puede aplicar zoom aunque el viewport lo desactive.
+   Cancelamos únicamente sus gestos de ampliación y el doble toque,
+   sin interceptar el desplazamiento vertical normal. */
+["gesturestart","gesturechange","gestureend"].forEach(type=>{
+  document.addEventListener(type,event=>event.preventDefault(),{passive:false});
+});
+document.addEventListener("dblclick",event=>event.preventDefault(),{passive:false});
+</script>
 <style>
 *{
   box-sizing:border-box;
 }
 
+html{
+  touch-action:pan-y;
+  -webkit-text-size-adjust:100%;
+}
 body{
   margin:0;
+  touch-action:pan-y;
   min-height:100vh;
   font-family:Arial,Helvetica,sans-serif;
   color:white;
@@ -847,6 +861,26 @@ header p{
   color:#819188;
   letter-spacing:1px;
 }
+.open-room-actions{
+  display:flex;
+  align-items:center;
+  gap:7px;
+}
+.open-room-share{
+  width:36px;
+  height:36px;
+  display:grid;
+  place-items:center;
+  padding:0;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:10px;
+  background:rgba(255,255,255,.07);
+  color:#cbd7d0;
+  font-size:17px;
+  cursor:pointer;
+  touch-action:manipulation;
+}
+.open-room-share:active{transform:scale(.95);}
 .open-room-join{
   border:0;
   border-radius:10px;
@@ -4313,6 +4347,14 @@ async function deleteExpiredOpenRoom(code,roomData){
   }
 }
 
+function shareOpenRoom(room){
+  const url=`${location.origin}${location.pathname}?room=${encodeURIComponent(room.code)}`;
+  const message=`⚽ Te invito a jugar en la mesa pública “${room.name}” de Mercado Élite 5.\n${url}`;
+  const whatsappUrl=`https://wa.me/?text=${encodeURIComponent(message)}`;
+  const popup=window.open(whatsappUrl,"_blank","noopener,noreferrer");
+  if(!popup) location.href=whatsappUrl;
+}
+
 function renderOpenRooms(openRooms){
   const list=$("openRoomsList");
   const count=$("openRoomsCount");
@@ -4403,8 +4445,21 @@ function renderOpenRooms(openRooms){
       }
     });
 
+    const actions=document.createElement("div");
+    actions.className="open-room-actions";
+
+    const share=document.createElement("button");
+    share.className="open-room-share";
+    share.type="button";
+    share.textContent="↗";
+    share.title="Compartir mesa por WhatsApp";
+    share.setAttribute("aria-label",`Compartir ${room.name} por WhatsApp`);
+    share.addEventListener("click",()=>shareOpenRoom(room));
+
+    actions.appendChild(share);
+    actions.appendChild(join);
     item.appendChild(info);
-    item.appendChild(join);
+    item.appendChild(actions);
     list.appendChild(item);
   });
 }
