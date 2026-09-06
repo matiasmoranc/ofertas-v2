@@ -3862,7 +3862,7 @@ function canvasRoundRect(ctx,x,y,width,height,radius){
   ctx.closePath();
 }
 
-function drawShareTeam(ctx,{x,y,width,color,label,name,media,squad}){
+function drawShareTeam(ctx,{x,y,width,color,label,name,media,attacks,advances,squad}){
   ctx.fillStyle="rgba(255,255,255,.055)";
   ctx.strokeStyle=color;
   ctx.lineWidth=3;
@@ -3887,12 +3887,33 @@ function drawShareTeam(ctx,{x,y,width,color,label,name,media,squad}){
   ctx.font="900 54px Arial";
   ctx.fillText(Number(media||0).toFixed(1),x+30,y+216);
 
+  /* Ventaja asignada para el minijuego. */
+  ctx.fillStyle="rgba(0,0,0,.22)";
+  canvasRoundRect(ctx,x+24,y+242,width-48,82,14);
+  ctx.fill();
+
+  ctx.fillStyle=color;
+  ctx.font="900 29px Arial";
+  ctx.fillText(String(attacks),x+44,y+282);
+  ctx.fillStyle="#dce6e0";
+  ctx.font="800 19px Arial";
+  ctx.fillText("ATAQUES",x+72,y+282);
+
+  ctx.textAlign="right";
+  ctx.fillStyle=color;
+  ctx.font="900 29px Arial";
+  ctx.fillText(String(advances),x+width-154,y+282);
+  ctx.fillStyle="#dce6e0";
+  ctx.font="800 19px Arial";
+  ctx.fillText("AVANCES AL GOL",x+width-42,y+282);
+  ctx.textAlign="left";
+
   ctx.fillStyle="#809188";
   ctx.font="800 22px Arial";
-  ctx.fillText("PLANTEL",x+30,y+275);
+  ctx.fillText("PLANTEL",x+30,y+362);
 
   squad.forEach((player,index)=>{
-    const rowY=y+330+(index*66);
+    const rowY=y+417+(index*55);
     ctx.fillStyle="rgba(0,0,0,.18)";
     canvasRoundRect(ctx,x+24,rowY-38,width-48,53,12);
     ctx.fill();
@@ -3959,8 +3980,19 @@ function buildResultShareImage(state){
 
       const mediaA=teamRatingAverageFromState(state,"A");
       const mediaB=teamRatingAverageFromState(state,"B");
-      drawShareTeam(ctx,{x:55,y:350,width:465,color:"#62b7ff",label:"EQUIPO AZUL",name:nameA,media:mediaA,squad:shareSquad(state,"A")});
-      drawShareTeam(ctx,{x:560,y:350,width:465,color:"#ff7182",label:"EQUIPO ROJO",name:nameB,media:mediaB,squad:shareSquad(state,"B")});
+      const mini=state.miniMatch || {};
+      drawShareTeam(ctx,{
+        x:55,y:350,width:465,color:"#62b7ff",label:"EQUIPO AZUL",name:nameA,media:mediaA,
+        attacks:Number(mini.attackLimit?.A || 3),
+        advances:Number(mini.advancesNeeded?.A || 3),
+        squad:shareSquad(state,"A")
+      });
+      drawShareTeam(ctx,{
+        x:560,y:350,width:465,color:"#ff7182",label:"EQUIPO ROJO",name:nameB,media:mediaB,
+        attacks:Number(mini.attackLimit?.B || 3),
+        advances:Number(mini.advancesNeeded?.B || 3),
+        squad:shareSquad(state,"B")
+      });
 
       ctx.textAlign="center";
       ctx.fillStyle="#ffffff";
