@@ -1893,6 +1893,23 @@ header p{
   color:#7f9186;
   font-size:10px;
 }
+.waiting-opponent-share{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  margin-top:18px;
+  padding:11px 15px;
+  border:1px solid rgba(255,255,255,.13);
+  border-radius:12px;
+  background:rgba(255,255,255,.08);
+  color:#e4ebe7;
+  font-size:12px;
+  font-weight:900;
+  cursor:pointer;
+  touch-action:manipulation;
+}
+.waiting-opponent-share:active{transform:scale(.97);}
 
 /* =========================
    ESPECTADORES EN VIVO
@@ -2097,7 +2114,7 @@ header p{
 <section id="gameScreen" class="screen-hidden">
   <div id="connectionBar" class="connection-bar">
     <div><span id="connectionDot" class="connection-dot"></span><span id="connectionText">Conectando...</span></div>
-    <div>Sala <strong id="gameRoomCode">------</strong></div>
+    <div id="gameRoomLabel">Sala <strong id="gameRoomCode">------</strong></div>
     <div id="myTeamPill" class="my-team-pill">Equipo ?</div>
   </div>
   <div class="spectator-counter-row">
@@ -2130,6 +2147,7 @@ header p{
     <p>Ya estás dentro de la sala. La partida comenzará automáticamente cuando entre el segundo jugador.</p>
     <div id="waitingOpponentCode" class="waiting-opponent-code">------</div>
     <div id="waitingOpponentNote" class="waiting-opponent-note">Compartí este código con tu rival.</div>
+    <button id="waitingOpponentShare" class="waiting-opponent-share hidden" type="button">↗ COMPARTIR MESA</button>
   </section>
 
   <div style="text-align:center;">
@@ -5049,6 +5067,9 @@ function enterGameScreen(state){
       ? "Tu mesa está publicada y visible para todos."
       : "Compartí este código con tu rival.";
   }
+  $("gameRoomLabel")?.classList.toggle("hidden",currentRoomIsOpen);
+  $("waitingOpponentCode")?.classList.toggle("hidden",currentRoomIsOpen);
+  $("waitingOpponentShare")?.classList.toggle("hidden",!currentRoomIsOpen);
   if(waitingForOpponent){
     $("gameArea").classList.add("hidden");
     $("teamIntro").classList.add("hidden");
@@ -5342,6 +5363,11 @@ $("createRoomButton").addEventListener("click",createRoom);
 $("createOpenRoomButton").addEventListener("click",createOpenRoom);
 $("joinRoomButton").addEventListener("click",()=>joinRoom());
 $("roomCodeInput").addEventListener("input",e=>e.target.value=normalizeCode(e.target.value));
+$("waitingOpponentShare")?.addEventListener("click",()=>{
+  if(!currentRoomIsOpen || !roomCode) return;
+  const openRoom=latestOpenRooms?.[roomCode] || {};
+  shareOpenRoom({code:roomCode,name:openRoom.name || "Mesa pública"});
+});
 $("copyRoomButton").addEventListener("click",async()=>{
   try{ await navigator.clipboard.writeText(roomCode||""); $("copyRoomButton").textContent="¡COPIADO!"; setTimeout(()=>$("copyRoomButton").textContent="COPIAR CÓDIGO",1200); }catch{ setLobbyMessage("Código: "+roomCode); }
 });
