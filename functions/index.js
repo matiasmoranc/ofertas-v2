@@ -257,17 +257,20 @@ exports.openTournamentMatch=onCall(async request=>{
 
     if(action==="adminResetStats"){
       const targetUid=cleanText(request.data?.targetUid,128);
-      const target=db.ref(`users/${targetUid}`);
-      const current=(await target.get()).val();
-      if(!current) throw new HttpsError("not-found","El usuario no existe.");
-      const cups=Number(current?.stats?.tournamentsWon||0);
-      await target.child("stats").set({
-        played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,tournamentsWon:cups
-      });
-      await Promise.all([
-        target.child("history").remove(),
-        target.child("appliedMatches").remove()
+      if(!targetUid) throw new HttpsError("invalid-argument","Falta el usuario.");
+      const [profileSnap,cupsSnap]=await Promise.all([
+        db.ref(`users/${targetUid}/profile`).get(),
+        db.ref(`users/${targetUid}/stats/tournamentsWon`).get()
       ]);
+      if(!profileSnap.exists()) throw new HttpsError("not-found","El usuario no existe.");
+      const cups=Number(cupsSnap.val()||0);
+      await db.ref().update({
+        [`users/${targetUid}/stats`]:{
+          played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,tournamentsWon:cups
+        },
+        [`users/${targetUid}/history`]:null,
+        [`users/${targetUid}/appliedMatches`]:null
+      });
       return {ok:true};
     }
 
