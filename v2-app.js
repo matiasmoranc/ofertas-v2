@@ -489,7 +489,27 @@ async function handleAdminClick(event){
     }
     if(resetStats){
       if(!await window.gameConfirm("¿Reiniciar estadísticas?","Se eliminarán todos los partidos y estadísticas de este usuario. Las copas se conservarán.","Reiniciar")) return;
-      await adminRequest("adminResetStats",{targetUid:resetStats.dataset.adminResetStats});
+      const originalText=resetStats.textContent;
+      resetStats.disabled=true;
+      resetStats.textContent="REINICIANDO…";
+      try{
+        await Promise.race([
+          adminRequest("adminResetStats",{targetUid:resetStats.dataset.adminResetStats}),
+          new Promise((_,reject)=>setTimeout(()=>reject(new Error("La operación está demorando demasiado. Volvé a intentarlo.")),25000))
+        ]);
+        await loadAdminPanel();
+        const success=el("adminMessage");
+        if(success){
+          success.textContent="Estadísticas reiniciadas correctamente.";
+          success.className="auth-message";
+        }
+      }finally{
+        if(resetStats.isConnected){
+          resetStats.disabled=false;
+          resetStats.textContent=originalText;
+        }
+      }
+      return;
     }
     if(deleteUser){
       if(!await window.gameConfirm("¿Eliminar usuario?",`Se eliminará definitivamente a “${deleteUser.dataset.name}”. Esta acción no se puede deshacer.`,"Eliminar")) return;
