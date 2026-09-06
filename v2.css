@@ -1,11 +1,14 @@
-@import url("./v2-base.css?v=20260906-logo");
+@import url("./v2-base.css?v=20260906-logo2");
 
-/* Logo gráfico del juego */
+/* Logo gráfico del juego: mismo espacio visual que el título anterior */
 header h1{
-  width:min(900px,100%);
-  aspect-ratio:3/1;
-  margin:0 auto;
-  background:url("./mercado-elite-5-logo.png?v=20260906-logo") center/contain no-repeat;
+  width:min(520px,92vw);
+  height:64px;
+  margin:4px auto 6px;
+  background-image:url("./mercado-elite-5-logo.png?v=20260906-logo2");
+  background-position:center;
+  background-size:contain;
+  background-repeat:no-repeat;
   font-size:0 !important;
   line-height:0;
   color:transparent;
@@ -14,9 +17,13 @@ header h1{
 }
 
 @media(max-width:500px){
+  body.in-lobby header{
+    min-height:0;
+  }
+
   body.in-lobby header h1{
-    width:100%;
-    max-width:520px;
-    margin:0 auto;
+    width:min(390px,94vw);
+    height:58px;
+    margin:3px auto 5px;
   }
 }
