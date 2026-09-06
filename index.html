@@ -3941,26 +3941,88 @@ function dataUrlToBlob(dataUrl){
   return new Blob([bytes],{type:mime});
 }
 
+function miniInitialWinChances(mini){
+  const distribution=(attacks,advances)=>{
+    const goalChance=Math.pow(2/3,Math.max(1,Number(advances||3)));
+    const total=Math.max(1,Number(attacks||3));
+    const choose=(n,k)=>{
+      let value=1;
+      for(let i=1;i<=k;i++) value=value*(n-k+i)/i;
+      return value;
+    };
+    return Array.from({length:total+1},(_,goals)=>
+      choose(total,goals)*Math.pow(goalChance,goals)*Math.pow(1-goalChance,total-goals)
+    );
+  };
+  const a=distribution(mini?.attackLimit?.A,mini?.advancesNeeded?.A);
+  const b=distribution(mini?.attackLimit?.B,mini?.advancesNeeded?.B);
+  let winA=0;
+  let winB=0;
+  a.forEach((chanceA,goalsA)=>b.forEach((chanceB,goalsB)=>{
+    if(goalsA>goalsB) winA+=chanceA*chanceB;
+    else if(goalsB>goalsA) winB+=chanceA*chanceB;
+  }));
+  /* Los empates se vuelven a jugar: mostramos la probabilidad de
+     victoria definitiva, repartida entre los dos equipos. */
+  const decisive=winA+winB;
+  const percentA=decisive>0?Math.round((winA/decisive)*100):50;
+  return {A:percentA,B:100-percentA};
+}
+
+function drawShareWinBar(ctx,{chanceA,chanceB}){
+  const x=105;
+  const y=405;
+  const width=870;
+  const height=54;
+
+  ctx.textAlign="center";
+  ctx.fillStyle="#a9b8af";
+  ctx.font="900 21px Arial";
+  ctx.fillText("PROBABILIDAD INICIAL DE GANAR",540,386);
+
+  ctx.save();
+  canvasRoundRect(ctx,x,y,width,height,27);
+  ctx.clip();
+  const blueWidth=width*(chanceA/100);
+  ctx.fillStyle="#268ee8";
+  ctx.fillRect(x,y,blueWidth,height);
+  ctx.fillStyle="#d83f54";
+  ctx.fillRect(x+blueWidth,y,width-blueWidth,height);
+  ctx.restore();
+
+  ctx.strokeStyle="rgba(255,255,255,.28)";
+  ctx.lineWidth=3;
+  canvasRoundRect(ctx,x,y,width,height,27);
+  ctx.stroke();
+
+  ctx.fillStyle="#ffffff";
+  ctx.font="900 29px Arial";
+  ctx.textAlign="left";
+  ctx.fillText(`AZUL ${chanceA}%`,x+24,y+37);
+  ctx.textAlign="right";
+  ctx.fillText(`${chanceB}% ROJO`,x+width-24,y+37);
+}
+
 function buildResultShareImage(state){
   try{
       const canvas=document.createElement("canvas");
       canvas.width=1080;
-      canvas.height=1350;
+      canvas.height=1500;
       const ctx=canvas.getContext("2d");
-      const gradient=ctx.createLinearGradient(0,0,0,1350);
+      const gradient=ctx.createLinearGradient(0,0,0,1500);
       gradient.addColorStop(0,"#153b27");
       gradient.addColorStop(.55,"#091a11");
       gradient.addColorStop(1,"#030906");
       ctx.fillStyle=gradient;
-      ctx.fillRect(0,0,1080,1350);
+      ctx.fillRect(0,0,1080,1500);
 
       ctx.textAlign="center";
       ctx.fillStyle="#baff42";
       ctx.font="900 27px Arial";
       ctx.fillText("MERCADO ÉLITE 5",540,76);
       ctx.fillStyle="#ffffff";
-      ctx.font="900 50px Arial";
-      ctx.fillText("RESULTADO FINAL",540,140);
+      ctx.font='900 66px "Permanent Marker", Impact, Arial';
+      ctx.fillText("RESULTADO FINAL",540,155);
 
       const result=state.result;
       const nameA=state.playerAName||"Equipo Azul";
@@ -3968,27 +4030,29 @@ function buildResultShareImage(state){
       ctx.fillStyle="#62b7ff";
       ctx.font="800 42px Arial";
       ctx.textAlign="right";
-      ctx.fillText(String(nameA).slice(0,18),440,220);
+      ctx.fillText(String(nameA).slice(0,18),440,245);
       ctx.fillStyle="#ffffff";
-      ctx.font="900 72px Arial";
+      ctx.font='900 104px "Permanent Marker", Impact, Arial';
       ctx.textAlign="center";
-      ctx.fillText(`${result.goalsA}  –  ${result.goalsB}`,540,292);
+      ctx.fillText(`${result.goalsA}  –  ${result.goalsB}`,540,350);
       ctx.fillStyle="#ff7182";
       ctx.font="800 42px Arial";
       ctx.textAlign="left";
-      ctx.fillText(String(nameB).slice(0,18),640,220);
+      ctx.fillText(String(nameB).slice(0,18),640,245);
 
       const mediaA=teamRatingAverageFromState(state,"A");
       const mediaB=teamRatingAverageFromState(state,"B");
       const mini=state.miniMatch || {};
+      const winChances=miniInitialWinChances(mini);
+      drawShareWinBar(ctx,{chanceA:winChances.A,chanceB:winChances.B});
       drawShareTeam(ctx,{
-        x:55,y:350,width:465,color:"#62b7ff",label:"EQUIPO AZUL",name:nameA,media:mediaA,
+        x:55,y:500,width:465,color:"#62b7ff",label:"EQUIPO AZUL",name:nameA,media:mediaA,
         attacks:Number(mini.attackLimit?.A || 3),
         advances:Number(mini.advancesNeeded?.A || 3),
         squad:shareSquad(state,"A")
       });
       drawShareTeam(ctx,{
-        x:560,y:350,width:465,color:"#ff7182",label:"EQUIPO ROJO",name:nameB,media:mediaB,
+        x:560,y:500,width:465,color:"#ff7182",label:"EQUIPO ROJO",name:nameB,media:mediaB,
         attacks:Number(mini.attackLimit?.B || 3),
         advances:Number(mini.advancesNeeded?.B || 3),
         squad:shareSquad(state,"B")
@@ -4002,17 +4066,17 @@ function buildResultShareImage(state){
         :result.winner==="B"
           ?`🏆 Ganó ${nameB}`
           :"🤝 Empate";
-      ctx.fillText(outcome,540,1110);
+      ctx.fillText(outcome,540,1255);
 
       ctx.fillStyle="#91a198";
       ctx.font="600 25px Arial";
-      ctx.fillText("¿Podés armar un equipo mejor?",540,1195);
+      ctx.fillText("¿Podés armar un equipo mejor?",540,1360);
       ctx.fillStyle="#baff42";
       ctx.font="800 29px Arial";
-      ctx.fillText("mercado5.web.app",540,1243);
+      ctx.fillText("mercado5.web.app",540,1410);
 
       ctx.fillStyle="rgba(255,255,255,.06)";
-      ctx.fillRect(150,1288,780,2);
+      ctx.fillRect(150,1455,780,2);
 
       const dataUrl=canvas.toDataURL("image/png",.96);
       return dataUrlToBlob(dataUrl);
