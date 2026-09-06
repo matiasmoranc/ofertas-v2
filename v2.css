@@ -1,11 +1,11 @@
-@import url("./v2-base.css?v=20260906-logo2");
+@import url("./v2-base.css?v=20260906-logo3");
 
 /* Logo gráfico del juego: mismo espacio visual que el título anterior */
 header h1{
   width:min(520px,92vw);
   height:64px;
   margin:4px auto 6px;
-  background-image:url("./mercado-elite-5-logo.png?v=20260906-logo2");
+  background-image:url("./mercado-elite-5-logo.svg?v=20260906-logo3");
   background-position:center;
   background-size:contain;
   background-repeat:no-repeat;
