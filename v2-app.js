@@ -4,7 +4,7 @@ import {
   signInWithEmailAndPassword, sendPasswordResetEmail, signOut, updateProfile,
   setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
-import { getDatabase, ref, get, set, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
+import { getDatabase, ref, get, set, onValue, runTransaction, goOffline, goOnline } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-functions.js";
 
 let profile=null, auth=null, db=null, functions=null, stopUser=null, stopTournaments=null;
@@ -626,10 +626,26 @@ function startUserData(uid){
   stopTournaments=onValue(ref(db,"tournaments"),snap=>renderTournaments(snap.val()||{}));
 }
 async function finishLogin(user){
-  // Renueva el token antes de consultar el perfil. Esto evita que Safari use
-  // una credencial persistida que Realtime Database ya considera vencida.
-  await user.getIdToken(true);
-  const snap=await get(ref(db,`users/${user.uid}/profile`));
+  // Al recargar en Safari, Auth puede restaurar al usuario unos instantes antes
+  // de que Realtime Database reciba el token. Reintentamos esa lectura breve
+  // para que una sesión válida no termine mostrando "Permission denied".
+  let snap=null, lastError=null;
+  const retryDelays=[150,400,900,1800];
+  for(const delay of retryDelays){
+    try{
+      await user.getIdToken(true);
+      await new Promise(resolve=>setTimeout(resolve,delay));
+      snap=await get(ref(db,`users/${user.uid}/profile`));
+      break;
+    }catch(error){
+      lastError=error;
+      const code=String(error?.code||"").toLowerCase();
+      if(!code.includes("permission-denied") && !code.includes("permission_denied")) throw error;
+      goOffline(db);
+      goOnline(db);
+    }
+  }
+  if(!snap) throw lastError||new Error("No se pudo restaurar la sesión.");
   if(!snap.exists()){ showGate("profile"); return; }
   profile=snap.val(); startUserData(user.uid); showLobby();
   await callbacks.onReady?.({app:auth.app,auth,db,user,profile});
