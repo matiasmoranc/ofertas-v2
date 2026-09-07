@@ -425,7 +425,8 @@ exports.openTournamentMatch=onCall(async request=>{
       const outcome=await processOfficialGame(room,game,game.result);
       if(outcome.processed) processed++;
     }
-    return {ok:true,processed};
+    const repairedTournaments=await repairTournamentWins(uid);
+    return {ok:true,processed,repairedTournaments};
   }
 
   if(request.data?.action==="claimDisconnectWin"){
@@ -800,6 +801,30 @@ async function applyUserResult(uid,room,entry,outcome,goalsFor,goalsAgainst){
   else updates["stats/drawn"]=ServerValue.increment(1);
   await userRef.update(updates);
 }
+async function applyTournamentWin(tournamentId,winnerUid){
+  if(!tournamentId || !winnerUid) return false;
+  let applied=false;
+  await db.ref(`users/${winnerUid}`).transaction(user=>{
+    if(!user) return;
+    user.appliedTournaments=user.appliedTournaments||{};
+    if(user.appliedTournaments[tournamentId]) return user;
+    user.appliedTournaments[tournamentId]=true;
+    user.stats={played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,tournamentsWon:0,...(user.stats||{})};
+    user.stats.tournamentsWon=Number(user.stats.tournamentsWon||0)+1;
+    applied=true;
+    return user;
+  });
+  return applied;
+}
+async function repairTournamentWins(uid){
+  const tournaments=(await db.ref("tournaments").get()).val()||{};
+  let repaired=0;
+  for(const [tournamentId,tournament] of Object.entries(tournaments)){
+    if(tournament?.status!=="completed" || tournament?.winnerUid!==uid) continue;
+    if(await applyTournamentWin(tournamentId,uid)) repaired++;
+  }
+  return repaired;
+}
 async function advanceTournament(game,result,winnerUid,winnerName){
   if(!game.tournamentId || !game.tournamentMatchId) return;
   const tournamentRef=db.ref(`tournaments/${game.tournamentId}`);
@@ -865,15 +890,7 @@ async function advanceTournament(game,result,winnerUid,winnerName){
     nameKey?db.ref(`tournamentNames/${nameKey}`).transaction(
       current=>current===game.tournamentId?null:current
     ):Promise.resolve(),
-    db.ref(`users/${winnerUid}`).transaction(user=>{
-      if(!user) return;
-      user.appliedTournaments=user.appliedTournaments||{};
-      if(user.appliedTournaments[game.tournamentId]) return user;
-      user.appliedTournaments[game.tournamentId]=true;
-      user.stats={played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,tournamentsWon:0,...(user.stats||{})};
-      user.stats.tournamentsWon=Number(user.stats.tournamentsWon||0)+1;
-      return user;
-    })
+    applyTournamentWin(game.tournamentId,winnerUid)
   ]);
 }
 
