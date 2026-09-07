@@ -3865,7 +3865,7 @@ function canvasRoundRect(ctx,x,y,width,height,radius){
   ctx.closePath();
 }
 
-function drawShareTeam(ctx,{x,y,width,color,label,name,media,attacks,advances,squad}){
+function drawShareTeam(ctx,{x,y,width,color,label,name,media,squad}){
   ctx.fillStyle="rgba(255,255,255,.055)";
   ctx.strokeStyle=color;
   ctx.lineWidth=3;
@@ -3890,33 +3890,12 @@ function drawShareTeam(ctx,{x,y,width,color,label,name,media,attacks,advances,sq
   ctx.font="900 54px Arial";
   ctx.fillText(Number(media||0).toFixed(1),x+30,y+216);
 
-  /* Ventaja asignada para el minijuego. */
-  ctx.fillStyle="rgba(0,0,0,.22)";
-  canvasRoundRect(ctx,x+24,y+242,width-48,82,14);
-  ctx.fill();
-
-  ctx.fillStyle=color;
-  ctx.font="900 29px Arial";
-  ctx.fillText(String(attacks),x+44,y+282);
-  ctx.fillStyle="#dce6e0";
-  ctx.font="800 19px Arial";
-  ctx.fillText("ATAQUES",x+72,y+282);
-
-  ctx.textAlign="right";
-  ctx.fillStyle=color;
-  ctx.font="900 25px Arial";
-  ctx.fillText(`${advances} AVANCES`,x+width-42,y+274);
-  ctx.fillStyle="#a9b8b0";
-  ctx.font="800 14px Arial";
-  ctx.fillText("PARA LLEGAR AL GOL",x+width-42,y+298);
-  ctx.textAlign="left";
-
   ctx.fillStyle="#809188";
   ctx.font="800 22px Arial";
-  ctx.fillText("PLANTEL",x+30,y+362);
+  ctx.fillText("PLANTEL",x+30,y+280);
 
   squad.forEach((player,index)=>{
-    const rowY=y+417+(index*55);
+    const rowY=y+335+(index*55);
     ctx.fillStyle="rgba(0,0,0,.18)";
     canvasRoundRect(ctx,x+24,rowY-38,width-48,53,12);
     ctx.fill();
@@ -3972,16 +3951,16 @@ function miniInitialWinChances(mini){
   return {A:percentA,B:100-percentA};
 }
 
-function drawShareWinBar(ctx,{chanceA,chanceB}){
+function drawShareWinBar(ctx,{chanceA,chanceB,attacksA,attacksB,advancesA,advancesB}){
   const x=105;
-  const y=405;
+  const y=397;
   const width=870;
-  const height=54;
+  const height=82;
 
   ctx.textAlign="center";
   ctx.fillStyle="#a9b8af";
   ctx.font="900 21px Arial";
-  ctx.fillText("PROBABILIDAD INICIAL DE GANAR",540,386);
+  ctx.fillText("VENTAJA INICIAL DEL MINIPARTIDO",540,378);
 
   ctx.save();
   canvasRoundRect(ctx,x,y,width,height,27);
@@ -3999,11 +3978,13 @@ function drawShareWinBar(ctx,{chanceA,chanceB}){
   ctx.stroke();
 
   ctx.fillStyle="#ffffff";
-  ctx.font="900 29px Arial";
-  ctx.textAlign="left";
-  ctx.fillText(`AZUL ${chanceA}%`,x+24,y+37);
-  ctx.textAlign="right";
-  ctx.fillText(`${chanceB}% ROJO`,x+width-24,y+37);
+  ctx.font="900 27px Arial";
+  ctx.textAlign="center";
+  ctx.fillText(`AZUL ${chanceA}%`,x+width*.25,y+33);
+  ctx.fillText(`${chanceB}% ROJO`,x+width*.75,y+33);
+  ctx.font="800 17px Arial";
+  ctx.fillText(`${attacksA} ATAQUES · ${advancesA} AVANCES`,x+width*.25,y+64);
+  ctx.fillText(`${attacksB} ATAQUES · ${advancesB} AVANCES`,x+width*.75,y+64);
 }
 
 function buildResultShareImage(state){
@@ -4047,17 +4028,17 @@ function buildResultShareImage(state){
       const mediaB=teamRatingAverageFromState(state,"B");
       const mini=state.miniMatch || {};
       const winChances=miniInitialWinChances(mini);
-      drawShareWinBar(ctx,{chanceA:winChances.A,chanceB:winChances.B});
+      drawShareWinBar(ctx,{
+        chanceA:winChances.A,chanceB:winChances.B,
+        attacksA:Number(mini.attackLimit?.A || 3),attacksB:Number(mini.attackLimit?.B || 3),
+        advancesA:Number(mini.advancesNeeded?.A || 3),advancesB:Number(mini.advancesNeeded?.B || 3)
+      });
       drawShareTeam(ctx,{
         x:55,y:500,width:465,color:"#62b7ff",label:"EQUIPO AZUL",name:nameA,media:mediaA,
-        attacks:Number(mini.attackLimit?.A || 3),
-        advances:Number(mini.advancesNeeded?.A || 3),
         squad:shareSquad(state,"A")
       });
       drawShareTeam(ctx,{
         x:560,y:500,width:465,color:"#ff7182",label:"EQUIPO ROJO",name:nameB,media:mediaB,
-        attacks:Number(mini.attackLimit?.B || 3),
-        advances:Number(mini.advancesNeeded?.B || 3),
         squad:shareSquad(state,"B")
       });
 
