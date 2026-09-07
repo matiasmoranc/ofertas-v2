@@ -67,11 +67,6 @@ exports.resolveLoginEmail=onCall(async request=>{
   return {email};
 });
 
-exports.refreshSession=onCall(async request=>{
-  const uid=requireAuth(request);
-  return {customToken:await getAuth().createCustomToken(uid)};
-});
-
 exports.createTournament=onCall(async request=>{
   const uid=requireAuth(request), name=cleanText(request.data?.name);
   if(name.length<3) throw new HttpsError("invalid-argument","El nombre debe tener al menos 3 caracteres.");
@@ -191,6 +186,10 @@ exports.joinTournament=onCall(async request=>{
 
 exports.openTournamentMatch=onCall(async request=>{
   const uid=requireAuth(request);
+
+  if(request.data?.action==="refreshSession"){
+    return {customToken:await getAuth().createCustomToken(uid)};
+  }
 
   if(request.data?.action==="leaderboard"){
     const users=(await db.ref("users").get()).val()||{};
