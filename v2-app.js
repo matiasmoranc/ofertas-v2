@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
-  signInWithEmailAndPassword, sendPasswordResetEmail, signOut, updateProfile,
+  signInWithEmailAndPassword, signInWithCustomToken, sendPasswordResetEmail, signOut, updateProfile,
   setPersistence, browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
 import { getDatabase, ref, get, set, onValue, runTransaction, goOffline, goOnline } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
@@ -631,6 +631,7 @@ async function finishLogin(user){
   // para que una sesión válida no termine mostrando "Permission denied".
   let snap=null, lastError=null;
   const retryDelays=[150,400,900,1800];
+  let renewedSession=false;
   for(const delay of retryDelays){
     try{
       await user.getIdToken(true);
@@ -641,6 +642,12 @@ async function finishLogin(user){
       lastError=error;
       const code=String(error?.code||"").toLowerCase();
       if(!code.includes("permission-denied") && !code.includes("permission_denied")) throw error;
+      if(!renewedSession){
+        renewedSession=true;
+        const result=await httpsCallable(functions,"openTournamentMatch")({action:"refreshSession"});
+        const credential=await signInWithCustomToken(auth,result.data.customToken);
+        user=credential.user;
+      }
       goOffline(db);
       goOnline(db);
     }
