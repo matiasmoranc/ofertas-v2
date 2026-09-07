@@ -9,6 +9,8 @@ import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/
 
 let profile=null, auth=null, db=null, functions=null, stopUser=null, stopTournaments=null;
 let callbacks={};
+let loginAttempt=null;
+let loggedInUid="";
 let tournamentRoomOpening="";
 let tournamentRoomPromise=null;
 let readyInviteKey="";
@@ -624,10 +626,23 @@ function startUserData(uid){
   stopTournaments=onValue(ref(db,"tournaments"),snap=>renderTournaments(snap.val()||{}));
 }
 async function finishLogin(user){
+  // Renueva el token antes de consultar el perfil. Esto evita que Safari use
+  // una credencial persistida que Realtime Database ya considera vencida.
+  await user.getIdToken(true);
   const snap=await get(ref(db,`users/${user.uid}/profile`));
   if(!snap.exists()){ showGate("profile"); return; }
   profile=snap.val(); startUserData(user.uid); showLobby();
   await callbacks.onReady?.({app:auth.app,auth,db,user,profile});
+}
+async function completeLogin(user){
+  if(loggedInUid===user.uid && profile) return;
+  if(loginAttempt?.uid===user.uid) return loginAttempt.promise;
+  const attempt={uid:user.uid,promise:null};
+  attempt.promise=finishLogin(user)
+    .then(()=>{ loggedInUid=user.uid; })
+    .finally(()=>{ if(loginAttempt===attempt) loginAttempt=null; });
+  loginAttempt=attempt;
+  return attempt.promise;
 }
 function bindUI(){
   el("loginTab").onclick=()=>showGate("login"); el("registerTab").onclick=()=>showGate("register");
@@ -643,7 +658,10 @@ function bindUI(){
         const resolved=await httpsCallable(functions,"resolveLoginEmail")({identifier});
         email=resolved.data.email;
       }
-      await signInWithEmailAndPassword(auth,email,el("loginPassword").value);
+      const credential=await signInWithEmailAndPassword(auth,email,el("loginPassword").value);
+      // No dependemos solamente de onAuthStateChanged: al ingresar otra vez
+      // con una sesión ya abierta, Firebase puede no emitir un nuevo evento.
+      await completeLogin(credential.user);
     }catch(err){setMessage(authError(err),true);}
   };
   el("registerForm").onsubmit=async e=>{e.preventDefault();const pass=el("registerPassword").value;if(pass!==el("registerPassword2").value)return setMessage("Las contraseñas no coinciden.",true);try{setMessage("Creando cuenta...");const cred=await createUserWithEmailAndPassword(auth,el("registerEmail").value.trim(),pass);await claimUsername(cred.user,el("registerUsername").value);await finishLogin(cred.user);}catch(err){setMessage(authError(err),true);}};
@@ -727,7 +745,7 @@ export async function startV2App(config,handlers={}){
   onAuthStateChanged(auth,async user=>{
     if(user){
       try{
-        await finishLogin(user);
+        await completeLogin(user);
         // Repara resultados válidos que hayan quedado sin procesar por una
         // interrupción del trigger. El servidor evita contabilizarlos dos veces.
         httpsCallable(functions,"openTournamentMatch")({action:"syncResults"}).catch(error=>
@@ -735,6 +753,6 @@ export async function startV2App(config,handlers={}){
         );
       }catch(err){showGate("login");setMessage(authError(err),true);}
     }
-    else{profile=null;if(stopUser)stopUser();if(stopTournaments)stopTournaments();showGate("login");callbacks.onSignedOut?.();}
+    else{profile=null;loggedInUid="";loginAttempt=null;if(stopUser)stopUser();if(stopTournaments)stopTournaments();showGate("login");callbacks.onSignedOut?.();}
   });
 }
