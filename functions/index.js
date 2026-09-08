@@ -191,10 +191,67 @@ exports.openTournamentMatch=onCall(async request=>{
     return {customToken:await getAuth().createCustomToken(uid)};
   }
 
+  if(request.data?.action==="searchPlayers"){
+    const query=cleanText(request.data?.query,40).toLowerCase();
+    if(query.length<2) return {players:[]};
+    const users=(await db.ref("users").get()).val()||{};
+    const players=Object.values(users).map(user=>({
+      username:cleanText(user?.profile?.username||"",40),
+      usernameKey:cleanText(user?.profile?.usernameKey||"",40).toLowerCase()
+    })).filter(player=>player.username&&(
+      player.username.toLowerCase().includes(query) ||
+      player.usernameKey.includes(query)
+    )).sort((a,b)=>{
+      const aStarts=a.username.toLowerCase().startsWith(query)?0:1;
+      const bStarts=b.username.toLowerCase().startsWith(query)?0:1;
+      return aStarts-bStarts||a.username.localeCompare(b.username);
+    }).slice(0,8);
+    return {players};
+  }
+
+  if(request.data?.action==="playerHistory"){
+    const usernameKey=cleanText(request.data?.usernameKey,40).toLowerCase();
+    if(!/^[a-z0-9_]{3,16}$/.test(usernameKey)){
+      throw new HttpsError("invalid-argument","El usuario no es válido.");
+    }
+    const targetUid=(await db.ref(`usernames/${usernameKey}`).get()).val();
+    if(!targetUid) throw new HttpsError("not-found","No encontramos ese usuario.");
+    const user=(await db.ref(`users/${targetUid}`).get()).val()||{};
+    const stats={
+      played:Number(user?.stats?.played||0),
+      won:Number(user?.stats?.won||0),
+      drawn:Number(user?.stats?.drawn||0),
+      lost:Number(user?.stats?.lost||0),
+      tournamentsWon:Number(user?.stats?.tournamentsWon||0)
+    };
+    const rivals={};
+    for(const match of Object.values(user?.history||{})){
+      const name=cleanText(match?.opponentName||"Rival",40);
+      const key=cleanText(match?.opponentUid||name.toLowerCase(),128);
+      if(!rivals[key]) rivals[key]={name,played:0,won:0,drawn:0,lost:0,lastPlayed:0};
+      const rival=rivals[key];
+      rival.name=name;
+      rival.played++;
+      rival.lastPlayed=Math.max(rival.lastPlayed,Number(match?.finishedAt||0));
+      if(match?.outcome==="win") rival.won++;
+      else if(match?.outcome==="loss") rival.lost++;
+      else rival.drawn++;
+    }
+    return {
+      player:{
+        username:cleanText(user?.profile?.username||usernameKey,40),
+        usernameKey,
+        stats,
+        rivals:Object.values(rivals).sort((a,b)=>b.lastPlayed-a.lastPlayed)
+      }
+    };
+  }
+
   if(request.data?.action==="leaderboard"){
     const users=(await db.ref("users").get()).val()||{};
     const players=Object.values(users).map(user=>({
       username:cleanText(user?.profile?.username||"Jugador",40),
+      usernameKey:cleanText(user?.profile?.usernameKey||"",40).toLowerCase(),
       won:Number(user?.stats?.won||0),
       drawn:Number(user?.stats?.drawn||0),
       lost:Number(user?.stats?.lost||0),
