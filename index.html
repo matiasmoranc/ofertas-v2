@@ -225,8 +225,13 @@ header p{
 
 .turn-money span{
   display:block;
+  max-width:150px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  margin:auto;
   font-size:9px;
-  opacity:.75;
+  opacity:.85;
 }
 
 .turn-money strong{
@@ -696,7 +701,14 @@ header p{
   font-size:10px;
   font-weight:900;
 }
+.live-squad-title span:first-child{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
 .live-squad-title span:last-child{
+  flex-shrink:0;
   color:#aaff38;
 }
 .live-player{
@@ -2160,7 +2172,7 @@ header p{
   <div id="gameArea" class="game">
     <section class="team-card">
       <div class="team-header">
-        <div><small>JUGADOR</small><h2>🔵 EQUIPO AZUL</h2></div>
+        <div><small>JUGADOR</small><h2 id="teamPlayerA">🔵 AZUL · ESPERANDO</h2></div>
         <div class="budget"><small>PRESUPUESTO</small><strong id="moneyA">€20</strong></div>
       </div>
       <div id="teamA" class="squad"></div>
@@ -2168,20 +2180,20 @@ header p{
 
     <main class="auction-card">
       <div class="turn-row">
-        <div class="turn-money team-a-money" id="teamAMoneyCard"><span>🔵 EQUIPO AZUL</span><strong id="turnMoneyA">€20</strong><small>Ver equipo</small></div>
+        <div class="turn-money team-a-money" id="teamAMoneyCard"><span id="turnTeamPlayerA">🔵 AZUL · ESPERANDO</span><strong id="turnMoneyA">€20</strong><small>Ver equipo</small></div>
         <div id="turnBadge" class="turn-badge">TURNO A</div>
-        <div class="turn-money team-b-money" id="teamBMoneyCard"><span>EQUIPO ROJO 🔴</span><strong id="turnMoneyB">€20</strong><small>Ver equipo</small></div>
+        <div class="turn-money team-b-money" id="teamBMoneyCard"><span id="turnTeamPlayerB">🔴 ROJO · ESPERANDO</span><strong id="turnMoneyB">€20</strong><small>Ver equipo</small></div>
       </div>
 
 
 
       <div id="liveSquads" class="live-squads">
         <div class="live-squad a">
-          <div class="live-squad-title"><span>🔵 EQUIPO AZUL</span><span id="liveMoneyA">€20</span></div>
+          <div class="live-squad-title"><span id="liveTeamPlayerA">🔵 AZUL · ESPERANDO</span><span id="liveMoneyA">€20</span></div>
           <div id="liveTeamA"></div>
         </div>
         <div class="live-squad b">
-          <div class="live-squad-title"><span>🔴 EQUIPO ROJO</span><span id="liveMoneyB">€20</span></div>
+          <div class="live-squad-title"><span id="liveTeamPlayerB">🔴 ROJO · ESPERANDO</span><span id="liveMoneyB">€20</span></div>
           <div id="liveTeamB"></div>
         </div>
       </div>
@@ -2225,7 +2237,7 @@ header p{
 
     <section class="team-card">
       <div class="team-header">
-        <div><small>JUGADOR</small><h2>🔴 EQUIPO ROJO</h2></div>
+        <div><small>JUGADOR</small><h2 id="teamPlayerB">🔴 ROJO · ESPERANDO</h2></div>
         <div class="budget"><small>PRESUPUESTO</small><strong id="moneyB">€20</strong></div>
       </div>
       <div id="teamB" class="squad"></div>
@@ -4382,10 +4394,28 @@ function updatePassCounter(){
   counter.classList.toggle("blocked",remaining===0);
 }
 
+function updateTeamPlayerLabels(){
+  const playerA=String(gameState?.playerAName||"Esperando").trim();
+  const playerB=String(gameState?.playerBName||"Esperando rival").trim();
+  const labels={
+    teamPlayerA:`🔵 AZUL · ${playerA}`,
+    turnTeamPlayerA:`🔵 AZUL · ${playerA}`,
+    liveTeamPlayerA:`🔵 AZUL · ${playerA}`,
+    teamPlayerB:`🔴 ROJO · ${playerB}`,
+    turnTeamPlayerB:`🔴 ROJO · ${playerB}`,
+    liveTeamPlayerB:`🔴 ROJO · ${playerB}`
+  };
+  Object.entries(labels).forEach(([id,label])=>{
+    const node=$(id);
+    if(node) node.textContent=label;
+  });
+}
+
 function updateScreen(){
   if(!gameState) return;
 
   updateMyMoneyHighlight();
+  updateTeamPlayerLabels();
 
   const introVisible=!$("teamIntro").classList.contains("hidden");
   const waitingForOpponent=gameState.status==="waiting" && !gameState.playerBUid;
