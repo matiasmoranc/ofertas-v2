@@ -732,6 +732,7 @@ function bracketMatch(tournamentId,matchId,match){
   const readyNames=Object.values(readyPlayers).map(player=>player?.username).filter(Boolean);
   const canOpen=mine && m.status==="ready" && !m.winnerUid && !mineReady;
   const canReenter=mine && m.status==="playing" && Boolean(m.roomCode) && !m.winnerUid;
+  const canWatch=!mine && m.status==="playing" && Boolean(m.roomCode) && !m.winnerUid;
   const hasScore=m.score && Number.isFinite(Number(m.score.A)) && Number.isFinite(Number(m.score.B));
   const status=m.winnerUid?"FINALIZADO":m.status==="playing"?"EN JUEGO":readyNames.length?"ESPERANDO RIVAL":"LISTO";
   const readyNotice=readyNames.length
@@ -743,7 +744,7 @@ function bracketMatch(tournamentId,matchId,match){
     <div class="bracket-player-row ${m.winnerUid===m.playerAUid?"winner":""}">${bracketPlayer(m.playerAName)}<strong>${hasScore?m.score.A:"–"}</strong></div>
     <div class="bracket-player-row ${m.winnerUid===m.playerBUid?"winner":""}">${bracketPlayer(m.playerBName)}<strong>${hasScore?m.score.B:"–"}</strong></div>
     ${readyNotice}
-    ${canOpen||canReenter?`<button class="small-action bracket-play" data-open-tournament="${esc(tournamentId)}" data-match="${esc(matchId)}">${buttonText}</button>`:mineReady&&m.status==="ready"?`<button class="small-action danger" data-cancel-ready="${esc(tournamentId)}" data-match="${esc(matchId)}">CANCELAR ESPERA</button>`:""}
+    ${canOpen||canReenter?`<button class="small-action bracket-play" data-open-tournament="${esc(tournamentId)}" data-match="${esc(matchId)}">${buttonText}</button>`:canWatch?`<button class="small-action bracket-play" data-watch-tournament="${esc(m.roomCode)}">👁 MIRAR PARTIDO</button>`:mineReady&&m.status==="ready"?`<button class="small-action danger" data-cancel-ready="${esc(tournamentId)}" data-match="${esc(matchId)}">CANCELAR ESPERA</button>`:""}
   </div>`;
 }
 function tournamentBracket(id,t){
@@ -863,7 +864,7 @@ function bindUI(){
     document.querySelectorAll("[data-admin-user-card]").forEach(card=>card.classList.toggle("screen-hidden",!card.dataset.search.includes(term)));
   });
   el("tournamentsPanelContent").addEventListener("click",async e=>{
-    const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), leave=e.target.closest("[data-leave-tournament]"), open=e.target.closest("[data-open-tournament]"), cancelReady=e.target.closest("[data-cancel-ready]"), remove=e.target.closest("[data-delete-tournament]"), toggle=e.target.closest("[data-toggle-tournament]");
+    const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), leave=e.target.closest("[data-leave-tournament]"), open=e.target.closest("[data-open-tournament]"), watch=e.target.closest("[data-watch-tournament]"), cancelReady=e.target.closest("[data-cancel-ready]"), remove=e.target.closest("[data-delete-tournament]"), toggle=e.target.closest("[data-toggle-tournament]");
     const msg=el("tournamentMessage");
     if(toggle){
       const id=toggle.dataset.toggleTournament;
@@ -910,6 +911,10 @@ function bindUI(){
           msg.textContent=result.data.message||"Estás pronto. Esperando que entre tu rival...";
           return;
         }
+      }
+      if(watch){
+        msg.textContent="Abriendo partido como espectador...";
+        await callbacks.onWatchTournamentRoom?.(watch.dataset.watchTournament);
       }
       if(remove){
         const card=remove.closest(".tournament-item"), name=card?.querySelector(".tournament-name")?.textContent||"este torneo";

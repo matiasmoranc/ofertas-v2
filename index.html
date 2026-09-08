@@ -2372,7 +2372,7 @@ header p{
 
 <script type="module">
 import { firebaseConfig } from "./firebase-config.js";
-import { startV2App, getV2Profile, forfeitTournamentMatch, forfeitOpenMatch, claimDisconnectedMatch, markTournamentMatchEntered, sendMatchEmoji, syncOfficialGameResult, readyTournamentRematch, postponeTournamentRematch } from "./v2-app.js?v=20260908-player-search-fix1";
+import { startV2App, getV2Profile, forfeitTournamentMatch, forfeitOpenMatch, claimDisconnectedMatch, markTournamentMatchEntered, sendMatchEmoji, syncOfficialGameResult, readyTournamentRematch, postponeTournamentRematch } from "./v2-app.js?v=20260908-tournament-spectators1";
 import { getDatabase, ref, get, update, onValue, runTransaction, remove, set, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
 
 /* =================================================
@@ -4889,12 +4889,18 @@ function stopSpectatorListener(){
   if($("spectatorCount")) $("spectatorCount").textContent="0";
 }
 
+function spectatorCollectionPath(code,state=gameState){
+  return state?.tournamentId && state?.tournamentMatchId
+    ? `tournamentSpectators/${code}`
+    : `openRooms/${code}/spectators`;
+}
+
 function listenToSpectators(code){
   stopSpectatorListener();
   if(!db || !code) return;
 
   unsubscribeSpectators=onValue(
-    ref(db,`openRooms/${code}/spectators`),
+    ref(db,spectatorCollectionPath(code)),
     snapshot=>{
       const data=snapshot.val() || {};
       const count=Object.keys(data).length;
@@ -5070,7 +5076,7 @@ async function startSpectatorPresence(code){
     spectatorDisconnectHandle=null;
   }
 
-  spectatorPresenceRef=ref(db,`openRooms/${code}/spectators/${spectatorSessionId}`);
+  spectatorPresenceRef=ref(db,`${spectatorCollectionPath(code)}/${spectatorSessionId}`);
 
   /* Firebase elimina automáticamente este espectador si cierra la pestaña,
      pierde conexión o abandona la partida. */
@@ -5111,7 +5117,7 @@ async function watchOpenRoom(code){
     roomCode=normalized;
     myTeam=null;
     isSpectator=true;
-    currentRoomIsOpen=true;
+    currentRoomIsOpen=!state.tournamentId;
     hasShownTeamIntro=true;
     gameState=state;
 
@@ -5514,12 +5520,13 @@ async function tryResumeFromUrl(){
   const state=snap.val();
 
   if(wantsWatch && state.playerAUid!==uid && state.playerBUid!==uid){
-    const openSnap=await get(ref(db,`openRooms/${code}`));
-    if(openSnap.exists() && state.playerAUid && state.playerBUid){
+    const isTournamentRoom=Boolean(state.tournamentId&&state.tournamentMatchId);
+    const openSnap=isTournamentRoom?null:await get(ref(db,`openRooms/${code}`));
+    if((isTournamentRoom||openSnap?.exists()) && state.playerAUid && state.playerBUid){
       roomCode=code;
       myTeam=null;
       isSpectator=true;
-      currentRoomIsOpen=true;
+      currentRoomIsOpen=!isTournamentRoom;
       hasShownTeamIntro=true;
       gameState=state;
       listenToRoom(code);
@@ -5816,7 +5823,8 @@ async function boot(){
       loadSavedTableName(); listenToOpenRooms(); await tryResumeFromUrl();
     },
     onSignedOut:()=>{uid=null;currentProfile=null;if(roomCode)leaveRoom(true,false);},
-    onTournamentRoom:enterTournamentRoom
+    onTournamentRoom:enterTournamentRoom,
+    onWatchTournamentRoom:watchOpenRoom
   });
 }
 
