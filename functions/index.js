@@ -482,7 +482,7 @@ exports.openTournamentMatch=onCall(async request=>{
       const outcome=await processOfficialGame(room,game,game.result);
       if(outcome.processed) processed++;
     }
-    const repairedTournaments=await repairTournamentWins(uid);
+    const repairedTournaments=await repairAllTournamentWins();
     return {ok:true,processed,repairedTournaments};
   }
 
@@ -873,12 +873,40 @@ async function applyTournamentWin(tournamentId,winnerUid){
   });
   return applied;
 }
-async function repairTournamentWins(uid){
-  const tournaments=(await db.ref("tournaments").get()).val()||{};
+async function reconcileTournamentWins(uid,tournaments){
+  const wonTournamentIds=Object.entries(tournaments||{})
+    .filter(([,tournament])=>tournament?.status==="completed"&&tournament?.winnerUid===uid)
+    .map(([tournamentId])=>tournamentId);
+  if(!uid || !wonTournamentIds.length) return 0;
+
   let repaired=0;
-  for(const [tournamentId,tournament] of Object.entries(tournaments)){
-    if(tournament?.status!=="completed" || tournament?.winnerUid!==uid) continue;
-    if(await applyTournamentWin(tournamentId,uid)) repaired++;
+  await db.ref(`users/${uid}`).transaction(user=>{
+    repaired=0;
+    if(!user) return;
+    user.appliedTournaments=user.appliedTournaments||{};
+    for(const tournamentId of wonTournamentIds){
+      if(user.appliedTournaments[tournamentId]) continue;
+      user.appliedTournaments[tournamentId]=true;
+      repaired++;
+    }
+    user.stats={played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,tournamentsWon:0,...(user.stats||{})};
+    const currentCups=Number(user.stats.tournamentsWon||0);
+    if(currentCups<wonTournamentIds.length){
+      repaired=Math.max(repaired,wonTournamentIds.length-currentCups);
+      user.stats.tournamentsWon=wonTournamentIds.length;
+    }
+    return user;
+  });
+  return repaired;
+}
+async function repairAllTournamentWins(){
+  const tournaments=(await db.ref("tournaments").get()).val()||{};
+  const winnerUids=[...new Set(Object.values(tournaments)
+    .filter(tournament=>tournament?.status==="completed"&&tournament?.winnerUid)
+    .map(tournament=>tournament.winnerUid))];
+  let repaired=0;
+  for(const winnerUid of winnerUids){
+    repaired+=await reconcileTournamentWins(winnerUid,tournaments);
   }
   return repaired;
 }
@@ -990,4 +1018,3 @@ exports.recordOfficialResult=onValueCreated("/games/{room}/result",async event=>
   const game=(await event.data.ref.parent.get()).val();
   await processOfficialGame(room,game,result);
 });
-
