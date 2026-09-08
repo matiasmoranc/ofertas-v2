@@ -1962,34 +1962,37 @@ header p{
 }
 
 .spectator-toast{
-  position:fixed;
-  top:14px;
-  left:50%;
-  z-index:3000;
-  transform:translate(-50%,-18px);
-  padding:10px 15px;
-  border-radius:999px;
-  background:rgba(5,15,10,.96);
-  border:1px solid rgba(255,255,255,.18);
-  box-shadow:0 12px 35px rgba(0,0,0,.38);
-  color:white;
-  font-size:12px;
+  position:absolute;
+  right:0;
+  bottom:calc(100% + 8px);
+  z-index:1;
+  width:max-content;
+  max-width:min(230px,calc(100vw - 32px));
+  transform:translateY(7px) scale(.96);
+  padding:8px 11px;
+  border-radius:10px;
+  background:rgba(5,15,10,.97);
+  border:1px solid rgba(186,255,66,.25);
+  box-shadow:0 10px 28px rgba(0,0,0,.4);
+  color:#edf5f0;
+  font-size:11px;
   font-weight:900;
+  line-height:1.25;
+  text-align:center;
   opacity:0;
   pointer-events:none;
-  transition:opacity .22s ease,transform .22s ease;
+  transition:opacity .2s ease,transform .2s ease;
 }
+.spectator-toast::after{content:"";position:absolute;right:13px;top:100%;border:5px solid transparent;border-top-color:rgba(186,255,66,.25)}
 
 .spectator-toast.show{
   opacity:1;
-  transform:translate(-50%,0);
+  transform:translateY(0) scale(1);
 }
 
 @media(max-width:500px){
   .spectator-toast{
-    top:10px;
-    max-width:calc(100% - 24px);
-    text-align:center;
+    max-width:calc(100vw - 24px);
     font-size:11px;
   }
 }
@@ -2133,9 +2136,8 @@ header p{
     <div id="myTeamPill" class="my-team-pill">Equipo ?</div>
   </div>
   <div class="spectator-counter-row">
-    <div id="spectatorCounter" class="spectator-counter" title="Espectadores conectados">👁 <strong id="spectatorCount">0</strong></div>
+    <div id="spectatorCounter" class="spectator-counter" title="Espectadores conectados">👁 <strong id="spectatorCount">0</strong><span id="spectatorToast" class="spectator-toast" aria-live="polite">Se unió un espectador</span></div>
   </div>
-  <div id="spectatorToast" class="spectator-toast" aria-live="polite">👁 Entró un espectador</div>
 
   <aside id="reconnectBanner" class="reconnect-banner hidden" aria-live="assertive">
     <strong id="reconnectTitle">Conexión interrumpida</strong>
@@ -2618,6 +2620,7 @@ let pendingOpenRoomAction = "";
 let unsubscribeSpectators = null;
 let spectatorPresenceRef = null;
 let spectatorDisconnectHandle = null;
+let unsubscribeSpectatorConnection = null;
 let lastSpectatorCount = null;
 let spectatorToastTimer = null;
 let playerPresenceRef = null;
@@ -4923,8 +4926,8 @@ function showSpectatorToast(amount=1){
   if(!toast) return;
 
   toast.textContent=amount>1
-    ? `👁 Entraron ${amount} espectadores`
-    : "👁 Entró un espectador";
+    ? `Se unieron ${amount} espectadores`
+    : "Se unió un espectador";
 
   toast.classList.remove("show");
   void toast.offsetWidth;
@@ -4933,7 +4936,7 @@ function showSpectatorToast(amount=1){
   if(spectatorToastTimer) clearTimeout(spectatorToastTimer);
   spectatorToastTimer=setTimeout(()=>{
     toast.classList.remove("show");
-  },2200);
+  },2000);
 }
 
 function stopSpectatorListener(){
@@ -5121,30 +5124,35 @@ async function startPlayerPresence(code){
 
 async function startSpectatorPresence(code){
   if(!db || !code || !isSpectator) return;
+  await stopSpectatorPresence();
 
-  /* Si veníamos mirando otra sala, limpiamos primero la presencia anterior. */
-  if(spectatorPresenceRef){
-    try{ await remove(spectatorPresenceRef); }catch{}
-    spectatorPresenceRef=null;
-  }
-  if(spectatorDisconnectHandle){
-    try{ await spectatorDisconnectHandle.cancel(); }catch{}
-    spectatorDisconnectHandle=null;
-  }
-
-  spectatorPresenceRef=ref(db,`${spectatorCollectionPath(code)}/${spectatorSessionId}`);
-
-  /* Firebase elimina automáticamente este espectador si cierra la pestaña,
-     pierde conexión o abandona la partida. */
-  spectatorDisconnectHandle=onDisconnect(spectatorPresenceRef);
-  await spectatorDisconnectHandle.remove();
-  await set(spectatorPresenceRef,{
-    uid,
-    joinedAt:Date.now()
+  const targetRef=ref(db,`${spectatorCollectionPath(code)}/${spectatorSessionId}`);
+  spectatorPresenceRef=targetRef;
+  unsubscribeSpectatorConnection=onValue(ref(db,".info/connected"),async snapshot=>{
+    if(snapshot.val()!==true || spectatorPresenceRef!==targetRef || !isSpectator) return;
+    try{
+      if(spectatorDisconnectHandle){
+        try{ await spectatorDisconnectHandle.cancel(); }catch{}
+      }
+      const disconnectHandle=onDisconnect(targetRef);
+      spectatorDisconnectHandle=disconnectHandle;
+      await disconnectHandle.remove();
+      if(spectatorPresenceRef!==targetRef || !isSpectator){
+        try{ await disconnectHandle.cancel(); }catch{}
+        return;
+      }
+      await set(targetRef,{uid,joinedAt:Date.now()});
+    }catch(error){
+      console.warn("No se pudo actualizar la presencia del espectador:",error);
+    }
   });
 }
 
 async function stopSpectatorPresence(){
+  if(unsubscribeSpectatorConnection){
+    unsubscribeSpectatorConnection();
+    unsubscribeSpectatorConnection=null;
+  }
   if(spectatorDisconnectHandle){
     try{ await spectatorDisconnectHandle.cancel(); }catch{}
     spectatorDisconnectHandle=null;
@@ -5595,6 +5603,7 @@ async function tryResumeFromUrl(){
     isSpectator=false;
     roomCode=code;
     myTeam=state.playerAUid===uid?"A":"B";
+    gameState=state;
     const openSnap=await get(ref(db,`openRooms/${code}`));
     currentRoomIsOpen=openSnap.exists();
     listenToRoom(code);
