@@ -24,6 +24,9 @@ let leaderboardData=[];
 let leaderboardLoading=false;
 let latestHistoryData={};
 let latestHistoryStats={};
+let latestTournamentsData={};
+let tournamentVisibilityTimer=null;
+const COMPLETED_TOURNAMENT_VISIBILITY_MS=6*60*60*1000;
 
 async function openTournamentRoomOnce(code){
   if(!code) return;
@@ -536,9 +539,34 @@ async function handleAdminClick(event){
   }
 }
 
+function tournamentRemainsVisible(tournament,now=Date.now()){
+  if(tournament?.status!=="completed") return true;
+  const finishedAt=Number(tournament?.finishedAt||0);
+  return !finishedAt || now-finishedAt<COMPLETED_TOURNAMENT_VISIBILITY_MS;
+}
+function scheduleTournamentVisibilityRefresh(data){
+  if(tournamentVisibilityTimer) clearTimeout(tournamentVisibilityTimer);
+  tournamentVisibilityTimer=null;
+  const now=Date.now();
+  const expirations=Object.values(data||{})
+    .filter(tournament=>tournament?.status==="completed"&&Number(tournament?.finishedAt||0)>0)
+    .map(tournament=>Number(tournament.finishedAt)+COMPLETED_TOURNAMENT_VISIBILITY_MS)
+    .filter(expiresAt=>expiresAt>now);
+  if(!expirations.length) return;
+  const nextExpiry=Math.min(...expirations);
+  tournamentVisibilityTimer=setTimeout(
+    ()=>renderTournaments(latestTournamentsData),
+    Math.max(50,nextExpiry-Date.now()+25)
+  );
+}
 function renderTournaments(data={}){
   const node=el("tournamentsPanelContent"); if(!node) return;
-  const list=Object.entries(data).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+  latestTournamentsData=data||{};
+  const now=Date.now();
+  const list=Object.entries(latestTournamentsData)
+    .filter(([,tournament])=>tournamentRemainsVisible(tournament,now))
+    .sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+  scheduleTournamentVisibilityRefresh(latestTournamentsData);
   node.innerHTML=`<div class="tournament-create"><input id="tournamentName" class="auth-input" maxlength="28" placeholder="Nombre del torneo"><button id="createTournamentButton" class="small-action green">CREAR</button></div><div id="tournamentMessage" class="auth-message"></div><div class="tournament-list">${list.length?list.map(([id,t])=>tournamentCard(id,t)).join(""):'<div class="empty-state">No hay torneos todavía. Creá el primero.</div>'}</div>`;
   syncTournamentReadiness(data);
   const currentUid=auth.currentUser?.uid;
@@ -776,6 +804,6 @@ export async function startV2App(config,handlers={}){
         );
       }catch(err){showGate("login");setMessage(authError(err),true);}
     }
-    else{profile=null;loggedInUid="";loginAttempt=null;if(stopUser)stopUser();if(stopTournaments)stopTournaments();showGate("login");callbacks.onSignedOut?.();}
+    else{profile=null;loggedInUid="";loginAttempt=null;if(stopUser)stopUser();if(stopTournaments)stopTournaments();if(tournamentVisibilityTimer)clearTimeout(tournamentVisibilityTimer);tournamentVisibilityTimer=null;latestTournamentsData={};showGate("login");callbacks.onSignedOut?.();}
   });
 }
