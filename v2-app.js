@@ -24,6 +24,11 @@ let leaderboardData=[];
 let leaderboardLoading=false;
 let latestHistoryData={};
 let latestHistoryStats={};
+let playerSearchResults=[];
+let selectedPublicPlayer=null;
+let playerSearchQuery="";
+let playerSearchLoading=false;
+let playerSearchTimer=null;
 let latestTournamentsData={};
 let tournamentVisibilityTimer=null;
 const COMPLETED_TOURNAMENT_VISIBILITY_MS=6*60*60*1000;
@@ -358,19 +363,143 @@ async function loadLeaderboard(){
     renderHistory(latestHistoryData,latestHistoryStats);
   }
 }
+function publicPlayerRivalries(player){
+  const rivals=Array.isArray(player?.rivals)?player.rivals:[];
+  if(!rivals.length) return '<div class="empty-state compact-empty">Este jugador todavía no tiene partidos registrados.</div>';
+  return `<div class="history-list">${rivals.map(rival=>`
+    <div class="history-item rivalry-item compact">
+      <div class="rivalry-head">
+        <strong>vs ${esc(rival.name||"Rival")}</strong>
+        <span>${Number(rival.played||0)} PJ</span>
+      </div>
+      <div class="rivalry-record compact">
+        <span class="outcome-win"><b>${Number(rival.won||0)}</b> G</span>
+        <span class="outcome-draw"><b>${Number(rival.drawn||0)}</b> E</span>
+        <span class="outcome-loss"><b>${Number(rival.lost||0)}</b> P</span>
+      </div>
+    </div>`).join("")}</div>`;
+}
+function publicPlayerCard(player){
+  if(!player) return "";
+  const stats=statsOf(player.stats);
+  return `<section class="public-history-card">
+    <div class="public-history-head">
+      <div><small>HISTORIAL DE</small><strong>${esc(player.username||"Jugador")}</strong></div>
+      <button id="closePublicHistory" type="button" aria-label="Cerrar historial">✕</button>
+    </div>
+    <div class="public-history-stats">
+      <div><strong>${stats.played}</strong><span>JUGADOS</span></div>
+      <div><strong>${stats.won}</strong><span>GANADOS</span></div>
+      <div><strong>${stats.drawn}</strong><span>EMPATADOS</span></div>
+      <div><strong>${stats.lost}</strong><span>PERDIDOS</span></div>
+      <div class="public-cups"><strong>🏆 ${stats.tournamentsWon}</strong><span>TORNEOS</span></div>
+    </div>
+    <div class="history-section-title public-rivals-title"><strong>CONTRA OTROS JUGADORES</strong><span>G · E · P</span></div>
+    ${publicPlayerRivalries(player)}
+  </section>`;
+}
+function renderPlayerSearchDropdown(){
+  const resultsNode=el("playerSearchResults");
+  if(!resultsNode) return;
+  if(playerSearchLoading){
+    resultsNode.innerHTML='<div class="player-search-state">Buscando…</div>';
+    return;
+  }
+  if(playerSearchQuery.trim().length<2){
+    resultsNode.innerHTML="";
+    return;
+  }
+  resultsNode.innerHTML=playerSearchResults.length
+    ?playerSearchResults.map(player=>`<button type="button" data-player-history="${esc(player.usernameKey)}">${esc(player.username)}</button>`).join("")
+    :'<div class="player-search-state">No encontramos usuarios.</div>';
+}
+async function searchPublicPlayers(query){
+  if(!functions) return;
+  const expected=query.trim().toLowerCase();
+  if(expected.length<2){
+    playerSearchResults=[];
+    playerSearchLoading=false;
+    renderPlayerSearchDropdown();
+    return;
+  }
+  playerSearchLoading=true;
+  renderPlayerSearchDropdown();
+  try{
+    const response=await httpsCallable(functions,"openTournamentMatch")({action:"searchPlayers",query:expected});
+    if(playerSearchQuery.trim().toLowerCase()!==expected) return;
+    playerSearchResults=Array.isArray(response.data?.players)?response.data.players:[];
+  }catch(error){
+    console.warn("No se pudieron buscar jugadores:",error);
+    playerSearchResults=[];
+  }finally{
+    if(playerSearchQuery.trim().toLowerCase()===expected){
+      playerSearchLoading=false;
+      renderPlayerSearchDropdown();
+    }
+  }
+}
+async function loadPublicPlayerHistory(usernameKey){
+  if(!functions||!usernameKey) return;
+  const resultsNode=el("playerSearchResults");
+  if(resultsNode) resultsNode.innerHTML='<div class="player-search-state">Cargando historial…</div>';
+  try{
+    const response=await httpsCallable(functions,"openTournamentMatch")({action:"playerHistory",usernameKey});
+    selectedPublicPlayer=response.data?.player||null;
+    playerSearchQuery=selectedPublicPlayer?.username||playerSearchQuery;
+    playerSearchResults=[];
+    renderHistory(latestHistoryData,latestHistoryStats);
+  }catch(error){
+    console.warn("No se pudo cargar el historial público:",error);
+    if(resultsNode) resultsNode.innerHTML='<div class="player-search-state error">No se pudo cargar ese historial.</div>';
+  }
+}
+function bindHistorySearch(){
+  const input=el("playerHistorySearch");
+  if(input){
+    input.addEventListener("input",event=>{
+      playerSearchQuery=event.target.value;
+      if(playerSearchTimer) clearTimeout(playerSearchTimer);
+      if(playerSearchQuery.trim().length<2){
+        playerSearchResults=[];
+        playerSearchLoading=false;
+        renderPlayerSearchDropdown();
+        return;
+      }
+      playerSearchTimer=setTimeout(()=>searchPublicPlayers(playerSearchQuery),250);
+    });
+  }
+  el("playerSearchResults")?.addEventListener("click",event=>{
+    const button=event.target.closest("[data-player-history]");
+    if(button) loadPublicPlayerHistory(button.dataset.playerHistory);
+  });
+  el("closePublicHistory")?.addEventListener("click",()=>{
+    selectedPublicPlayer=null;
+    playerSearchQuery="";
+    playerSearchResults=[];
+    renderHistory(latestHistoryData,latestHistoryStats);
+  });
+}
 function renderHistory(history,stats={}){
   const node=el("historyPanelContent"); if(!node) return;
   const matches=Object.values(history||{});
-  const trophy=`<div class="tournament-wins-summary"><span>🏆</span><div><strong>${Number(stats.tournamentsWon||0)}</strong><small>TORNEOS GANADOS</small></div></div>`;
+  const search=`<section class="player-history-search">
+    <div class="history-section-title"><strong>BUSCAR JUGADOR</strong><span>HISTORIAL PÚBLICO</span></div>
+    <div class="player-search-box">
+      <input id="playerHistorySearch" class="auth-input" type="search" autocomplete="off" placeholder="Escribí un nombre de usuario" value="${esc(playerSearchQuery)}">
+      <div id="playerSearchResults" class="player-search-results"></div>
+    </div>
+  </section>`;
+  const selected=publicPlayerCard(selectedPublicPlayer);
+  const trophy=`<div class="tournament-wins-summary"><span>🏆</span><div><strong>${Number(stats.tournamentsWon||0)}</strong><small>TUS TORNEOS GANADOS</small></div></div>`;
   const rankingRows=leaderboardData.map((player,index)=>`
-    <div class="ranking-row ${profile?.usernameKey===String(player.username||"").toLowerCase()?"is-me":""}">
+    <button type="button" class="ranking-row ${profile?.usernameKey===String(player.username||"").toLowerCase()?"is-me":""}" data-player-history="${esc(player.usernameKey||String(player.username||"").toLowerCase())}">
       <strong class="ranking-position">${index+1}</strong>
       <span class="ranking-name">${esc(player.username||"Jugador")}</span>
       <span class="ranking-record"><b>${Number(player.won||0)} G</b><i>${Number(player.drawn||0)} E</i><em>${Number(player.lost||0)} P</em></span>
-    </div>`).join("");
+    </button>`).join("");
   const ranking=`
     <section class="history-ranking">
-      <div class="history-section-title"><strong>RANKING DE VICTORIAS</strong><span>G · E · P</span></div>
+      <div class="history-section-title"><strong>RANKING DE VICTORIAS</strong><span>TOCÁ UN USUARIO · G · E · P</span></div>
       <div class="ranking-list">${rankingRows||(leaderboardLoading?'<div class="ranking-empty">Cargando ranking…</div>':'<div class="ranking-empty">Todavía no hay jugadores con partidos.</div>')}</div>
     </section>`;
 
@@ -391,7 +520,7 @@ function renderHistory(history,stats={}){
   const items=Object.values(rivals).sort((a,b)=>b.lastPlayed-a.lastPlayed);
   const rivalry=items.length
     ? `<section class="history-rivalries">
-        <div class="history-section-title"><strong>CONTRA TUS RIVALES</strong></div>
+        <div class="history-section-title"><strong>TU HISTORIAL CONTRA RIVALES</strong></div>
         <div class="history-list">${items.map(rival=>`
           <div class="history-item rivalry-item compact">
             <div class="rivalry-head">
@@ -406,7 +535,9 @@ function renderHistory(history,stats={}){
           </div>`).join("")}</div>
       </section>`
     : '<div class="empty-state compact-empty">Todavía no jugaste partidos registrados.</div>';
-  node.innerHTML=trophy+ranking+rivalry;
+  node.innerHTML=search+selected+trophy+ranking+rivalry;
+  renderPlayerSearchDropdown();
+  bindHistorySearch();
 }
 async function adminRequest(action,data={}){
   if(!functions) throw new Error("Firebase todavía no está disponible.");
