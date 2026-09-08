@@ -780,7 +780,7 @@ function tournamentCard(id,t){
     <div class="tournament-collapsible ${expanded?"":"screen-hidden"}">
       ${waitingSlots}
       ${t.matches?tournamentBracket(id,t):""}
-      ${t.winnerName?`<div class="champion-banner"><span class="rotating-trophy">🏆</span><div><small>CAMPEÓN</small><strong>${esc(t.winnerName)}</strong></div></div>`:""}
+      ${t.winnerName?`<div class="champion-banner"><span class="rotating-trophy">🏆</span><div class="champion-copy"><small>CAMPEÓN</small><strong>${esc(t.winnerName)}</strong></div>${t.status==="completed"?`<button class="tournament-share-icon" type="button" data-share-tournament="${esc(id)}" aria-label="Compartir imagen del campeón" title="Compartir imagen del campeón"><span aria-hidden="true">↗</span></button>`:""}</div>`:""}
     </div>
   </div>`;
 }
@@ -864,7 +864,7 @@ function bindUI(){
     document.querySelectorAll("[data-admin-user-card]").forEach(card=>card.classList.toggle("screen-hidden",!card.dataset.search.includes(term)));
   });
   el("tournamentsPanelContent").addEventListener("click",async e=>{
-    const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), leave=e.target.closest("[data-leave-tournament]"), open=e.target.closest("[data-open-tournament]"), watch=e.target.closest("[data-watch-tournament]"), cancelReady=e.target.closest("[data-cancel-ready]"), remove=e.target.closest("[data-delete-tournament]"), toggle=e.target.closest("[data-toggle-tournament]");
+    const create=e.target.closest("#createTournamentButton"), join=e.target.closest("[data-join-tournament]"), leave=e.target.closest("[data-leave-tournament]"), open=e.target.closest("[data-open-tournament]"), watch=e.target.closest("[data-watch-tournament]"), cancelReady=e.target.closest("[data-cancel-ready]"), remove=e.target.closest("[data-delete-tournament]"), toggle=e.target.closest("[data-toggle-tournament]"), share=e.target.closest("[data-share-tournament]");
     const msg=el("tournamentMessage");
     if(toggle){
       const id=toggle.dataset.toggleTournament;
@@ -881,6 +881,14 @@ function bindUI(){
     }
     if(msg) msg.className="auth-message";
     try{
+      if(share){
+        const tournament=latestTournamentsData[share.dataset.shareTournament];
+        if(!tournament?.winnerName) throw new Error("Todavía no está disponible la imagen del campeón.");
+        if(typeof window.shareTournamentChampionImage!=="function") throw new Error("No se pudo preparar la imagen para compartir.");
+        share.disabled=true;
+        await window.shareTournamentChampionImage(tournament);
+        share.disabled=false;
+      }
       if(create){const name=el("tournamentName").value.trim();if(name.length<3)throw new Error("Escribí un nombre para el torneo.");msg.textContent="Creando torneo...";await httpsCallable(functions,"createTournament")({name});}
       if(join){msg.textContent="Uniéndote...";await httpsCallable(functions,"joinTournament")({tournamentId:join.dataset.joinTournament});}
       if(leave){
@@ -923,7 +931,7 @@ function bindUI(){
         await httpsCallable(functions,"deleteTournament")({tournamentId:remove.dataset.deleteTournament});
       }
       if(msg) msg.textContent="";
-    }catch(err){if(msg){msg.textContent=err?.message||"No se pudo completar la acción.";msg.className="auth-message error";}}
+    }catch(err){if(share)share.disabled=false;if(msg){msg.textContent=err?.message||"No se pudo completar la acción.";msg.className="auth-message error";}}
   });
 }
 export async function startV2App(config,handlers={}){

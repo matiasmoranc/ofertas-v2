@@ -4310,6 +4310,62 @@ async function shareResultOnWhatsApp(){
   }
 }
 
+async function shareTournamentChampionImage(tournament){
+  const finalMatch=tournament?.matches?.final||{};
+  const winnerUid=finalMatch.winnerUid||tournament?.winnerUid;
+  const winnerName=finalMatch.winnerName||tournament?.winnerName||"Campeón";
+  if(!winnerUid||!finalMatch.playerAUid||!finalMatch.playerBUid){
+    throw new Error("No se encontraron todos los datos de la final.");
+  }
+  const score=finalMatch.score||{};
+  const state={
+    playerAUid:finalMatch.playerAUid,
+    playerAName:finalMatch.playerAName||"Equipo Azul",
+    playerBUid:finalMatch.playerBUid,
+    playerBName:finalMatch.playerBName||"Equipo Rojo",
+    result:{
+      winner:winnerUid===finalMatch.playerAUid?"A":"B",
+      goalsA:Number.isFinite(Number(score.A))?Number(score.A):0,
+      goalsB:Number.isFinite(Number(score.B))?Number(score.B):0
+    }
+  };
+  const testFile=new File(["campeon"],"campeon.png",{type:"image/png"});
+  let canShareFile=false;
+  try{
+    canShareFile=Boolean(navigator.share&&navigator.canShare&&navigator.canShare({files:[testFile]}));
+  }catch(error){
+    console.warn("El navegador no pudo comprobar el uso compartido de archivos:",error);
+  }
+  const fallbackWindow=canShareFile?null:window.open("about:blank","_blank");
+  try{
+    const blob=buildTournamentChampionShareImage(state,tournament);
+    const slug=String(tournament.name||"torneo").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"torneo";
+    const file=new File([blob],`campeon-${slug}.png`,{type:"image/png"});
+    const text=`🏆 ${winnerName} es campeón del torneo “${tournament.name||"Torneo"}” en Mercado Élite 5\n\nJugá en https://mercado5.web.app/`;
+    if(canShareFile){
+      await navigator.share({title:"Campeón de Mercado Élite 5",text,files:[file]});
+      return;
+    }
+    const imageUrl=URL.createObjectURL(blob);
+    const link=document.createElement("a");
+    link.href=imageUrl;
+    link.download=file.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(()=>URL.revokeObjectURL(imageUrl),15000);
+    const whatsappUrl=`https://wa.me/?text=${encodeURIComponent(text)}`;
+    if(fallbackWindow) fallbackWindow.location.href=whatsappUrl;
+    else window.open(whatsappUrl,"_blank");
+    await window.gameAlert("Imagen descargada","WhatsApp se abrió con el torneo y el enlace. Adjuntá la imagen que se descargó automáticamente.");
+  }catch(error){
+    if(fallbackWindow&&!fallbackWindow.closed) fallbackWindow.close();
+    if(error?.name==="AbortError") return;
+    throw error;
+  }
+}
+window.shareTournamentChampionImage=shareTournamentChampionImage;
+
 function renderResult(){
   const r=gameState?.result;
   if(!r){$("resultCard").classList.add("hidden");return;}
