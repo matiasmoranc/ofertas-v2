@@ -4069,6 +4069,159 @@ function buildResultShareImage(state){
     }
 }
 
+function fitShareText(ctx,text,maxWidth,startSize,minSize=22,fontFamily="Arial"){
+  let size=startSize;
+  do{
+    ctx.font=`900 ${size}px ${fontFamily}`;
+    if(ctx.measureText(String(text)).width<=maxWidth) break;
+    size-=2;
+  }while(size>minSize);
+  return size;
+}
+
+function drawTournamentMatch(ctx,{x,y,width,label,match,scoreOverride=null}){
+  const height=190;
+  ctx.fillStyle="rgba(255,255,255,.065)";
+  ctx.strokeStyle="rgba(186,255,66,.34)";
+  ctx.lineWidth=3;
+  canvasRoundRect(ctx,x,y,width,height,24);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign="left";
+  ctx.fillStyle="#baff42";
+  ctx.font="900 22px Arial";
+  ctx.fillText(label,x+26,y+37);
+
+  const score=scoreOverride||match?.score||{};
+  const rows=[
+    {uid:match?.playerAUid,name:match?.playerAName||"Por definir",score:score.A},
+    {uid:match?.playerBUid,name:match?.playerBName||"Por definir",score:score.B}
+  ];
+  rows.forEach((player,index)=>{
+    const rowY=y+88+(index*62);
+    const winner=Boolean(match?.winnerUid&&match.winnerUid===player.uid);
+    ctx.fillStyle=winner?"rgba(186,255,66,.13)":"rgba(0,0,0,.18)";
+    canvasRoundRect(ctx,x+18,rowY-36,width-36,50,12);
+    ctx.fill();
+    ctx.fillStyle=winner?"#dfff9c":"#ffffff";
+    fitShareText(ctx,player.name,width-125,27,19,"Arial");
+    ctx.textAlign="left";
+    ctx.fillText(String(player.name).slice(0,24),x+38,rowY);
+    ctx.fillStyle=winner?"#baff42":"#ffffff";
+    ctx.font="900 28px Arial";
+    ctx.textAlign="right";
+    ctx.fillText(Number.isFinite(Number(player.score))?String(player.score):"–",x+width-38,rowY);
+  });
+}
+
+function buildTournamentChampionShareImage(state,tournament){
+  const canvas=document.createElement("canvas");
+  canvas.width=1080;
+  canvas.height=1500;
+  const ctx=canvas.getContext("2d");
+  const gradient=ctx.createLinearGradient(0,0,0,1500);
+  gradient.addColorStop(0,"#16452c");
+  gradient.addColorStop(.48,"#091c12");
+  gradient.addColorStop(1,"#030906");
+  ctx.fillStyle=gradient;
+  ctx.fillRect(0,0,1080,1500);
+
+  const result=state.result||{};
+  const winnerUid=result.winner==="A"?state.playerAUid:state.playerBUid;
+  const champion=result.winner==="A"?(state.playerAName||"Equipo Azul"):(state.playerBName||"Equipo Rojo");
+  const tournamentName=tournament?.name||"Torneo";
+  const participants=Object.values(tournament?.participants||{})
+    .sort((a,b)=>Number(a.joinedAt||0)-Number(b.joinedAt||0));
+  const matches=tournament?.matches||{};
+  const finalMatch={
+    ...(matches.final||{}),
+    playerAUid:matches.final?.playerAUid||state.playerAUid,
+    playerAName:matches.final?.playerAName||state.playerAName,
+    playerBUid:matches.final?.playerBUid||state.playerBUid,
+    playerBName:matches.final?.playerBName||state.playerBName,
+    winnerUid,
+    winnerName:champion
+  };
+
+  ctx.textAlign="center";
+  ctx.fillStyle="#baff42";
+  ctx.font="900 27px Arial";
+  ctx.fillText("MERCADO ÉLITE 5",540,72);
+  ctx.fillStyle="#ffffff";
+  ctx.font='900 64px "Permanent Marker", Impact, Arial';
+  ctx.fillText("CAMPEÓN DEL TORNEO",540,150);
+
+  ctx.fillStyle="rgba(186,255,66,.10)";
+  ctx.strokeStyle="#baff42";
+  ctx.lineWidth=4;
+  canvasRoundRect(ctx,90,190,900,205,34);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle="#a9b8af";
+  ctx.font="800 24px Arial";
+  ctx.fillText(`TORNEO “${String(tournamentName).slice(0,32)}”`,540,238);
+  ctx.fillStyle="#baff42";
+  ctx.font='900 82px "Permanent Marker", Impact, Arial';
+  ctx.fillText("🏆",540,320);
+  ctx.fillStyle="#ffffff";
+  fitShareText(ctx,champion,780,54,30,'"Permanent Marker", Impact, Arial');
+  ctx.fillText(String(champion).slice(0,26),540,372);
+
+  ctx.textAlign="left";
+  ctx.fillStyle="#9eafa5";
+  ctx.font="900 23px Arial";
+  ctx.fillText("PARTICIPANTES",80,455);
+  const participantWidth=220;
+  participants.slice(0,4).forEach((participant,index)=>{
+    const x=80+(index*235);
+    const isChampion=participant.uid===winnerUid;
+    ctx.fillStyle=isChampion?"rgba(186,255,66,.15)":"rgba(255,255,255,.06)";
+    ctx.strokeStyle=isChampion?"#baff42":"rgba(255,255,255,.16)";
+    ctx.lineWidth=2;
+    canvasRoundRect(ctx,x,478,participantWidth,76,16);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle=isChampion?"#baff42":"#ffffff";
+    fitShareText(ctx,participant.username,participantWidth-28,25,17,"Arial");
+    ctx.textAlign="center";
+    ctx.fillText(String(participant.username||"Jugador").slice(0,18),x+(participantWidth/2),526);
+  });
+
+  ctx.textAlign="left";
+  ctx.fillStyle="#9eafa5";
+  ctx.font="900 23px Arial";
+  ctx.fillText("ELIMINACIONES",80,620);
+  drawTournamentMatch(ctx,{x:80,y:645,width:440,label:"SEMIFINAL 1",match:matches.semifinal1});
+  drawTournamentMatch(ctx,{x:560,y:645,width:440,label:"SEMIFINAL 2",match:matches.semifinal2});
+  drawTournamentMatch(ctx,{
+    x:255,y:875,width:570,label:"FINAL",match:finalMatch,
+    scoreOverride:{A:result.goalsA,B:result.goalsB}
+  });
+
+  ctx.fillStyle="rgba(186,255,66,.09)";
+  canvasRoundRect(ctx,155,1110,770,145,25);
+  ctx.fill();
+  ctx.textAlign="center";
+  ctx.fillStyle="#a9b8af";
+  ctx.font="800 23px Arial";
+  ctx.fillText("CAMPEÓN",540,1155);
+  ctx.fillStyle="#baff42";
+  fitShareText(ctx,champion,690,48,28,'"Permanent Marker", Impact, Arial');
+  ctx.fillText(String(champion).slice(0,26),540,1213);
+
+  ctx.fillStyle="#91a198";
+  ctx.font="600 25px Arial";
+  ctx.fillText("¿Podés levantar la próxima copa?",540,1360);
+  ctx.fillStyle="#baff42";
+  ctx.font="800 29px Arial";
+  ctx.fillText("mercado5.web.app",540,1410);
+  ctx.fillStyle="rgba(255,255,255,.06)";
+  ctx.fillRect(150,1455,780,2);
+
+  return dataUrlToBlob(canvas.toDataURL("image/png",.96));
+}
+
 async function shareResultOnWhatsApp(){
   if(!gameState?.result) return;
   const button=$("shareWhatsAppButton");
@@ -4083,14 +4236,39 @@ async function shareResultOnWhatsApp(){
   button.disabled=true;
   button.textContent="CREANDO IMAGEN…";
   try{
-    const blob=buildResultShareImage(gameState);
-    const file=new File([blob],`mercado-elite-${roomCode||"resultado"}.png`,{type:"image/png"});
     const result=gameState.result;
-    const text=`⚽ Mercado Élite 5\n${gameState.playerAName||"Equipo Azul"} ${result.goalsA}–${result.goalsB} ${gameState.playerBName||"Equipo Rojo"}\n\nJugá en https://mercado5.web.app/`;
+    const isTournamentFinal=Boolean(
+      gameState.tournamentId &&
+      gameState.tournamentMatchId==="final" &&
+      result.winner!=="DRAW"
+    );
+    let tournament=null;
+    if(isTournamentFinal){
+      try{
+        const tournamentSnap=await get(ref(db,`tournaments/${gameState.tournamentId}`));
+        tournament=tournamentSnap.val();
+      }catch(error){
+        console.warn("No se pudieron cargar los datos de la copa para compartir:",error);
+      }
+    }
+    const specialChampionImage=Boolean(isTournamentFinal&&tournament);
+    const blob=specialChampionImage
+      ?buildTournamentChampionShareImage(gameState,tournament)
+      :buildResultShareImage(gameState);
+    const fileName=specialChampionImage
+      ?`campeon-${String(tournament.name||"torneo").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"torneo"}.png`
+      :`mercado-elite-${roomCode||"resultado"}.png`;
+    const file=new File([blob],fileName,{type:"image/png"});
+    const champion=result.winner==="A"
+      ?(gameState.playerAName||"Equipo Azul")
+      :(gameState.playerBName||"Equipo Rojo");
+    const text=specialChampionImage
+      ?`🏆 ${champion} es campeón del torneo “${tournament.name||"Torneo"}” en Mercado Élite 5\n\nJugá en https://mercado5.web.app/`
+      :`⚽ Mercado Élite 5\n${gameState.playerAName||"Equipo Azul"} ${result.goalsA}–${result.goalsB} ${gameState.playerBName||"Equipo Rojo"}\n\nJugá en https://mercado5.web.app/`;
 
     if(canShareFile){
       await navigator.share({
-        title:"Resultado de Mercado Élite 5",
+        title:specialChampionImage?"Campeón de Mercado Élite 5":"Resultado de Mercado Élite 5",
         text,
         files:[file]
       });
