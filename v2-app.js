@@ -780,7 +780,7 @@ function tournamentCard(id,t){
     <div class="tournament-collapsible ${expanded?"":"screen-hidden"}">
       ${waitingSlots}
       ${t.matches?tournamentBracket(id,t):""}
-      ${t.winnerName?`<div class="champion-banner"><span class="rotating-trophy">🏆</span><div class="champion-copy"><small>CAMPEÓN</small><strong>${esc(t.winnerName)}</strong></div>${t.status==="completed"?`<button class="tournament-share-icon" type="button" data-share-tournament="${esc(id)}" aria-label="Compartir imagen del campeón" title="Compartir imagen del campeón"><span aria-hidden="true">↗</span></button>`:""}</div>`:""}
+      ${t.winnerName?`<div class="champion-banner"><span class="rotating-trophy">🏆</span><div class="champion-copy"><small>CAMPEÓN</small><strong>${esc(t.winnerName)}</strong></div>${t.status==="completed"?`<button class="tournament-share-icon" type="button" data-share-tournament="${esc(id)}" aria-label="Compartir imagen del campeón" title="Compartir imagen del campeón"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.4"></circle><circle cx="6" cy="12" r="2.4"></circle><circle cx="18" cy="19" r="2.4"></circle><path d="M8.2 10.9 15.8 6.2M8.2 13.1l7.6 4.7"></path></svg></button>`:""}</div>`:""}
     </div>
   </div>`;
 }
