@@ -660,3 +660,32 @@ body.dialog-open{overflow:hidden}
 .rivalry-record.compact b{font-size:13px}
 .compact-empty{padding:15px 10px}
 @media(max-width:380px){.ranking-record{gap:5px;font-size:9px}.rivalry-item.compact{grid-template-columns:1fr}.rivalry-record.compact{justify-content:flex-start}}
+
+
+/* Buscador e historial público de jugadores */
+.player-history-search{margin-bottom:14px}
+.player-search-box{position:relative}
+.player-search-results{position:absolute;z-index:30;top:calc(100% + 5px);left:0;right:0;display:grid;max-height:250px;overflow:auto;border-radius:13px;background:#0b1d13;box-shadow:0 16px 42px rgba(0,0,0,.55)}
+.player-search-results:empty{display:none}
+.player-search-results button{border:0;border-top:1px solid rgba(255,255,255,.07);padding:12px 14px;background:transparent;color:#fff;text-align:left;font-weight:800;cursor:pointer}
+.player-search-results button:first-child{border-top:0}
+.player-search-results button:hover,.player-search-results button:focus{background:rgba(186,255,66,.12);color:#baff42}
+.player-search-state{padding:12px 14px;color:#8fa097;font-size:12px}
+.player-search-state.error{color:#ff9b9b}
+.public-history-card{margin:14px 0;padding:15px;border:1px solid rgba(186,255,66,.28);border-radius:17px;background:linear-gradient(145deg,rgba(186,255,66,.08),rgba(0,0,0,.16))}
+.public-history-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:11px}
+.public-history-head small{display:block;color:#8fa097;font-size:9px;font-weight:900;letter-spacing:1px}
+.public-history-head strong{display:block;margin-top:3px;color:#fff;font-size:22px}
+.public-history-head button{width:32px;height:32px;border:0;border-radius:9px;background:rgba(255,255,255,.08);color:#fff;cursor:pointer}
+.public-history-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.public-history-stats>div{padding:10px 4px;border-radius:11px;background:rgba(0,0,0,.24);text-align:center}
+.public-history-stats strong{display:block;color:#ffd45c;font-size:18px}
+.public-history-stats span{display:block;margin-top:2px;color:#8fa097;font-size:8px;font-weight:800}
+.public-history-stats .public-cups strong{color:#baff42}
+.public-rivals-title{margin-top:14px}
+.ranking-row{width:100%;border-right:0;border-bottom:0;border-left:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.ranking-row:hover,.ranking-row:focus{background:rgba(186,255,66,.08)}
+@media(max-width:500px){
+  .public-history-stats{grid-template-columns:repeat(2,1fr)}
+  .public-history-stats .public-cups{grid-column:1/-1}
+}
