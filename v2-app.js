@@ -401,6 +401,10 @@ function publicPlayerCard(player){
 function renderPlayerSearchDropdown(){
   const resultsNode=el("playerSearchResults");
   if(!resultsNode) return;
+  if(selectedPublicPlayer){
+    resultsNode.innerHTML="";
+    return;
+  }
   if(playerSearchLoading){
     resultsNode.innerHTML='<div class="player-search-state">Buscando…</div>';
     return;
@@ -458,6 +462,8 @@ function bindHistorySearch(){
   if(input){
     input.addEventListener("input",event=>{
       playerSearchQuery=event.target.value;
+      selectedPublicPlayer=null;
+      el("historyPanelContent")?.querySelector(".public-history-card")?.remove();
       if(playerSearchTimer) clearTimeout(playerSearchTimer);
       if(playerSearchQuery.trim().length<2){
         playerSearchResults=[];
