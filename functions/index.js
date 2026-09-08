@@ -873,9 +873,51 @@ async function applyTournamentWin(tournamentId,winnerUid){
   });
   return applied;
 }
+function completedTournamentWinner(tournament){
+  const finalMatch=tournament?.matches?.final;
+  if(finalMatch?.winnerUid){
+    return {
+      uid:finalMatch.winnerUid,
+      name:finalMatch.winnerName||tournament?.winnerName||"Campeón"
+    };
+  }
+  if(tournament?.status==="completed"&&tournament?.winnerUid){
+    return {uid:tournament.winnerUid,name:tournament.winnerName||"Campeón"};
+  }
+  return null;
+}
+async function normalizeCompletedTournaments(tournaments){
+  const updates={};
+  const releasedNames=[];
+  let repaired=0;
+  for(const [tournamentId,tournament] of Object.entries(tournaments||{})){
+    const winner=completedTournamentWinner(tournament);
+    if(!winner) continue;
+    if(tournament.status!=="completed"||tournament.winnerUid!==winner.uid){
+      updates[`tournaments/${tournamentId}/status`]="completed";
+      updates[`tournaments/${tournamentId}/winnerUid`]=winner.uid;
+      updates[`tournaments/${tournamentId}/winnerName`]=winner.name;
+      updates[`tournaments/${tournamentId}/finishedAt`]=Number(tournament.finishedAt||Date.now());
+      tournament.status="completed";
+      tournament.winnerUid=winner.uid;
+      tournament.winnerName=winner.name;
+      tournament.finishedAt=Number(tournament.finishedAt||Date.now());
+      repaired++;
+    }
+    const nameKey=tournament.nameKey||tournamentNameKey(tournament.name);
+    if(nameKey) releasedNames.push(
+      db.ref(`tournamentNames/${nameKey}`).transaction(
+        current=>current===tournamentId?null:current
+      )
+    );
+  }
+  if(Object.keys(updates).length) await db.ref().update(updates);
+  await Promise.all(releasedNames);
+  return repaired;
+}
 async function reconcileTournamentWins(uid,tournaments){
   const wonTournamentIds=Object.entries(tournaments||{})
-    .filter(([,tournament])=>tournament?.status==="completed"&&tournament?.winnerUid===uid)
+    .filter(([,tournament])=>completedTournamentWinner(tournament)?.uid===uid)
     .map(([tournamentId])=>tournamentId);
   if(!uid || !wonTournamentIds.length) return 0;
 
@@ -901,10 +943,10 @@ async function reconcileTournamentWins(uid,tournaments){
 }
 async function repairAllTournamentWins(){
   const tournaments=(await db.ref("tournaments").get()).val()||{};
+  let repaired=await normalizeCompletedTournaments(tournaments);
   const winnerUids=[...new Set(Object.values(tournaments)
-    .filter(tournament=>tournament?.status==="completed"&&tournament?.winnerUid)
-    .map(tournament=>tournament.winnerUid))];
-  let repaired=0;
+    .map(tournament=>completedTournamentWinner(tournament)?.uid)
+    .filter(Boolean))];
   for(const winnerUid of winnerUids){
     repaired+=await reconcileTournamentWins(winnerUid,tournaments);
   }
