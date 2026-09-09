@@ -2145,6 +2145,12 @@ header p{
     <b id="reconnectCountdown">2:00</b>
   </aside>
 
+  <aside id="turnTimeoutBanner" class="reconnect-banner turn-timeout-banner hidden" aria-live="assertive">
+    <strong id="turnTimeoutTitle">Tiempo de juego</strong>
+    <span id="turnTimeoutMessage">Este equipo perderá si no juega.</span>
+    <b id="turnTimeoutCountdown">2:00</b>
+  </aside>
+
   <div id="emojiReactionOverlay" class="emoji-reaction-overlay" aria-live="polite"></div>
   <div id="matchEmojiControls" class="match-emoji-controls hidden">
     <div id="matchEmojiMenu" class="match-emoji-menu hidden" aria-label="Emojis del partido">
@@ -2374,7 +2380,7 @@ header p{
 
 <script type="module">
 import { firebaseConfig } from "./firebase-config.js";
-import { startV2App, getV2Profile, forfeitTournamentMatch, forfeitOpenMatch, claimDisconnectedMatch, markTournamentMatchEntered, sendMatchEmoji, syncOfficialGameResult, readyTournamentRematch, postponeTournamentRematch } from "./v2-app.js?v=20260908-tournament-spectators1";
+import { startV2App, getV2Profile, forfeitTournamentMatch, forfeitOpenMatch, claimDisconnectedMatch, claimInactiveMatch, markTournamentMatchEntered, sendMatchEmoji, syncOfficialGameResult, readyTournamentRematch, postponeTournamentRematch } from "./v2-app.js?v=20260909-inactivity-spectators2";
 import { getDatabase, ref, get, update, onValue, runTransaction, remove, set, onDisconnect, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
 
 /* =================================================
@@ -2623,6 +2629,8 @@ let spectatorDisconnectHandle = null;
 let unsubscribeSpectatorConnection = null;
 let lastSpectatorCount = null;
 let spectatorToastTimer = null;
+let turnTimeoutTimer = null;
+let turnTimeoutClaimInFlight = false;
 let playerPresenceRef = null;
 let playerPresenceCode = "";
 let playerDisconnectHandle = null;
@@ -2645,6 +2653,8 @@ const spectatorSessionId =
 const TABLE_NAME_STORAGE_KEY = "mercadoElite5_lastTableName";
 const OPEN_ROOM_MAX_AGE = 5 * 60 * 1000;
 const PLAYING_ROOM_MAX_INACTIVITY = 10 * 60 * 1000;
+const TURN_WARNING_AFTER = 2 * 60 * 1000;
+const TURN_FORFEIT_AFTER = 4 * 60 * 1000;
 const OPEN_ROOM_CLEANUP_INTERVAL = 15 * 1000;
 let autoMatchTimer = null;
 let teamIntroTimer = null;
@@ -2686,6 +2696,18 @@ function generateRoomCode(){
 function otherPlayer(team){ return team === "A" ? "B" : "A"; }
 function teamName(team){ return team==="A" ? "AZUL" : "ROJO"; }
 function teamLabel(team){ return team==="A" ? "Equipo Azul" : "Equipo Rojo"; }
+function activeTurnTeam(state){
+  if(!state || state.result) return null;
+  if(state.status==="playing" && state.currentPlayerIndex!==null && state.currentPlayerIndex!==undefined){
+    return ["A","B"].includes(state.currentBidder) ? state.currentBidder : null;
+  }
+  const mini=state.miniMatch;
+  if(state.status==="mini_match" && mini){
+    if(mini.phase==="attack") return mini.attacker;
+    if(mini.phase==="defense") return otherPlayer(mini.attacker);
+  }
+  return null;
+}
 function clamp(value,min,max){ return Math.max(min,Math.min(max,value)); }
 function playerByIndex(index){ return Number.isInteger(index) ? players[index] : null; }
 function teamEntries(state, team){ return Array.isArray(state?.teams?.[team]) ? state.teams[team] : []; }
@@ -2747,6 +2769,8 @@ function freshGameState(code, playerAUid, playerBUid=null, seed=(Date.now()>>>0)
     matchInstanceId: `${code}-${Date.now()}-${seed}`,
     result: null,
     miniMatch: null,
+    turnStartedAt: playerBUid ? Date.now() : null,
+    turnToken: playerBUid ? 1 : 0,
     message: playerBUid ? "🧤 Comienza la fase obligatoria de arqueros." : "Esperando al Equipo B..."
   };
 }
@@ -2921,6 +2945,10 @@ async function mutateGame(mutator){
       if(!team) return;
       const next=JSON.parse(JSON.stringify(current));
       const changed=mutator(next,team);
+      if(changed!==false){
+        next.turnStartedAt=Date.now();
+        next.turnToken=Number(current.turnToken||0)+1;
+      }
       return changed===false ? undefined : next;
     },{applyLocally:false});
     if(!result.committed){
@@ -4949,9 +4977,7 @@ function stopSpectatorListener(){
 }
 
 function spectatorCollectionPath(code,state=gameState){
-  return state?.tournamentId && state?.tournamentMatchId
-    ? `tournamentSpectators/${code}`
-    : `openRooms/${code}/spectators`;
+  return `spectatorPresence/${code}`;
 }
 
 function listenToSpectators(code){
@@ -4998,6 +5024,71 @@ function hideReconnectBanner(){
   opponentDisconnected=false;
   disconnectClaimInFlight=false;
   $("reconnectBanner")?.classList.add("hidden");
+}
+
+function clearTurnTimeout(){
+  if(turnTimeoutTimer){
+    clearInterval(turnTimeoutTimer);
+    turnTimeoutTimer=null;
+  }
+  turnTimeoutClaimInFlight=false;
+  $("turnTimeoutBanner")?.classList.add("hidden");
+}
+
+async function claimInactiveTurn(code,startedAt){
+  if(turnTimeoutClaimInFlight || isSpectator || !myTeam || !code) return;
+  turnTimeoutClaimInFlight=true;
+  try{
+    await claimInactiveMatch(code,startedAt);
+  }catch(error){
+    if(!["functions/failed-precondition","functions/not-found","functions/permission-denied"].includes(error?.code)){
+      console.warn("No se pudo resolver la inactividad:",error);
+    }
+  }finally{
+    turnTimeoutClaimInFlight=false;
+  }
+}
+
+function syncTurnTimeout(state){
+  const hasDisconnectedPlayer=Boolean(state && [state.playerAUid,state.playerBUid].some(playerUid=>{
+    const presence=state.playerPresence?.[playerUid];
+    return presence?.online===false && Number(presence?.disconnectedAt||0)>0;
+  }));
+  if(opponentDisconnected || hasDisconnectedPlayer || !state || state.result){
+    clearTurnTimeout();
+    return;
+  }
+  const inactiveTeam=activeTurnTeam(state);
+  const startedAt=Number(state.turnStartedAt||0);
+  if(!inactiveTeam || !startedAt){
+    clearTurnTimeout();
+    return;
+  }
+  const render=()=>{
+    if(!gameState || Number(gameState.turnStartedAt||0)!==startedAt || activeTurnTeam(gameState)!==inactiveTeam){
+      clearTurnTimeout();
+      return;
+    }
+    const elapsed=Date.now()-startedAt;
+    const banner=$("turnTimeoutBanner");
+    if(elapsed<TURN_WARNING_AFTER){
+      banner?.classList.add("hidden");
+      return;
+    }
+    const remaining=Math.max(0,TURN_FORFEIT_AFTER-elapsed);
+    const seconds=Math.ceil(remaining/1000);
+    const playerName=inactiveTeam==="A" ? (gameState.playerAName||"Equipo Azul") : (gameState.playerBName||"Equipo Rojo");
+    $("turnTimeoutTitle").textContent=`⌛ ${playerName} debe jugar`;
+    $("turnTimeoutMessage").textContent=`${teamLabel(inactiveTeam)} perderá 3–0 si no realiza una acción.`;
+    $("turnTimeoutCountdown").textContent=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,"0")}`;
+    banner?.classList.remove("hidden");
+    if(remaining<=0 && !isSpectator && myTeam===otherPlayer(inactiveTeam)){
+      claimInactiveTurn(roomCode,startedAt);
+    }
+  };
+  if(turnTimeoutTimer) clearInterval(turnTimeoutTimer);
+  render();
+  turnTimeoutTimer=setInterval(render,250);
 }
 
 async function claimDisconnectedOpponent(code){
@@ -5215,6 +5306,8 @@ async function enterTournamentRoom(code){
   if(state.currentPlayerIndex===null || state.currentPlayerIndex===undefined){
     state=JSON.parse(JSON.stringify(state));
     prepareNextAuctionInState(state,"🏆 Partido de torneo iniciado.");
+    state.turnStartedAt=Date.now();
+    state.turnToken=Number(state.turnToken||0)+1;
     await update(roomRef,state);
     const confirmed=await get(roomRef);
     if(!confirmed.exists()) throw new Error("La sala del torneo desapareció.");
@@ -5320,6 +5413,8 @@ async function joinRoom(forcedCode=null, fromOpenRoom=false){
           "✅ Equipo B conectado."
         );
       }
+      state.turnStartedAt=Date.now();
+      state.turnToken=Number(state.turnToken||0)+1;
     }
 
     /*
@@ -5547,6 +5642,7 @@ function listenToRoom(code){
 
     syncEmojiExperience(state);
     syncOpponentConnection(state);
+    syncTurnTimeout(state);
 
     /* Las mesas públicas siguen visibles mientras se juega para que otros
        usuarios puedan entrar como espectadores. Al terminar, se quitan del lobby. */
@@ -5630,6 +5726,7 @@ function leaveRoom(clearUrl=true, closeActiveMatch=false){
   lastMiniFlashId=null;
   lastMiniGuideKey="";
   miniBriefingSeenKey="";
+  clearTurnTimeout();
   const oldRoomCode=roomCode;
   const wasOpen=currentRoomIsOpen;
   const wasWaiting=gameState?.status==="waiting";

@@ -54,6 +54,15 @@
         }
       }
     },
+    "spectatorPresence": {
+      "$code": {
+        ".read": "auth != null",
+        "$session": {
+          ".write": "auth != null && ((!data.exists() && newData.child('uid').val() === auth.uid) || data.child('uid').val() === auth.uid)",
+          ".validate": "!newData.exists() || (newData.child('uid').val() === auth.uid && newData.child('joinedAt').isNumber())"
+        }
+      }
+    },
     "matches": {
       "$matchId": {
         ".read": "auth != null && (data.child('playerAUid').val() === auth.uid || data.child('playerBUid').val() === auth.uid)",

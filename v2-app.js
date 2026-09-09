@@ -187,6 +187,13 @@ export async function claimDisconnectedMatch(roomCode){
   });
   return result.data;
 }
+export async function claimInactiveMatch(roomCode,turnStartedAt){
+  if(!functions || !roomCode) throw new Error("No se pudo identificar la sala.");
+  const result=await httpsCallable(functions,"openTournamentMatch")({
+    action:"claimInactiveWin",roomCode,turnStartedAt
+  });
+  return result.data;
+}
 export async function forfeitOpenMatch(roomCode){
   if(!functions || !roomCode) throw new Error("No se pudo identificar la sala.");
   const result=await httpsCallable(functions,"openTournamentMatch")({

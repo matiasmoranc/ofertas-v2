@@ -205,6 +205,11 @@ button,a,input,select,textarea,[role="button"]{touch-action:manipulation}
   font-size:18px;
   transform:translateY(-50%);
 }
+.turn-timeout-banner{
+  border-color:rgba(255,83,83,.48);
+  background:rgba(42,8,8,.96);
+}
+.turn-timeout-banner strong{color:#ff8c8c}
 
 /* Diálogos propios del juego */
 body.dialog-open{overflow:hidden}

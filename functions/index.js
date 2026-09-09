@@ -30,6 +30,18 @@ function requireAuth(request){
   if(!request.auth) throw new HttpsError("unauthenticated","Tenés que iniciar sesión.");
   return request.auth.uid;
 }
+function activeTurnTeam(game){
+  if(!game || game.result) return null;
+  if(game.status==="playing" && game.currentPlayerIndex!==null && game.currentPlayerIndex!==undefined){
+    return ["A","B"].includes(game.currentBidder)?game.currentBidder:null;
+  }
+  const mini=game.miniMatch;
+  if(game.status==="mini_match" && mini){
+    if(mini.phase==="attack") return mini.attacker;
+    if(mini.phase==="defense") return mini.attacker==="A"?"B":"A";
+  }
+  return null;
+}
 async function requireAdmin(uid){
   const adminUid=(await db.ref("usernames/pinar93").get()).val();
   if(!adminUid || adminUid!==uid){
@@ -46,6 +58,7 @@ function baseTournamentGame(code,a,b,tournamentId,matchId){
     rngSeed:(Date.now()>>>0),result:null,miniMatch:null,
     matchInstanceId:`${code}-${Date.now()}-${matchId}`,
     tournamentId, tournamentMatchId:matchId,
+    turnStartedAt:Date.now(), turnToken:1,
     message:"🏆 Partido de torneo listo. Comienza la fase de arqueros."
   };
 }
@@ -484,6 +497,51 @@ exports.openTournamentMatch=onCall(async request=>{
     }
     const repairedTournaments=await repairAllTournamentWins();
     return {ok:true,processed,repairedTournaments};
+  }
+
+  if(request.data?.action==="claimInactiveWin"){
+    const code=cleanText(request.data?.roomCode,12);
+    const expectedStartedAt=Number(request.data?.turnStartedAt||0);
+    if(!code || !expectedStartedAt) throw new HttpsError("invalid-argument","Faltan datos del turno.");
+    const gameRef=db.ref(`games/${code}`);
+    const initial=(await gameRef.get()).val();
+    if(!initial) throw new HttpsError("not-found","La partida ya no existe.");
+    if(![initial.playerAUid,initial.playerBUid].includes(uid)){
+      throw new HttpsError("permission-denied","No participás de esta partida.");
+    }
+    if(initial.result) return {ok:true,alreadyFinished:true};
+    const inactiveTeam=activeTurnTeam(initial);
+    const claimantTeam=initial.playerAUid===uid?"A":"B";
+    if(!inactiveTeam || claimantTeam===inactiveTeam){
+      throw new HttpsError("permission-denied","Solo el rival puede reclamar la partida.");
+    }
+    if(Number(initial.turnStartedAt||0)!==expectedStartedAt){
+      throw new HttpsError("failed-precondition","El turno ya cambió.");
+    }
+    if(Date.now()-expectedStartedAt<240000){
+      throw new HttpsError("failed-precondition","El tiempo del turno todavía no terminó.");
+    }
+
+    const forfeited=await gameRef.transaction(current=>{
+      if(!current || current.result) return;
+      if(Number(current.turnStartedAt||0)!==expectedStartedAt) return;
+      const currentInactive=activeTurnTeam(current);
+      if(currentInactive!==inactiveTeam) return;
+      const winner=inactiveTeam==="A"?"B":"A";
+      const inactiveUid=inactiveTeam==="A"?current.playerAUid:current.playerBUid;
+      current.status="finished";
+      current.message="⌛ Tiempo agotado. Victoria 3–0 por inactividad.";
+      current.result={
+        goalsA:winner==="A"?3:0,
+        goalsB:winner==="B"?3:0,
+        winner,forfeit:true,forfeitedBy:inactiveUid,inactive:true,fromMiniMatch:false
+      };
+      return current;
+    });
+    const finalGame=forfeited.snapshot.val();
+    if(finalGame?.result) await processOfficialGame(code,finalGame,finalGame.result);
+    await db.ref(`openRooms/${code}`).remove();
+    return {ok:true,alreadyFinished:!forfeited.committed};
   }
 
   if(request.data?.action==="claimDisconnectWin"){
