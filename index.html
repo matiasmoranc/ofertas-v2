@@ -2614,6 +2614,7 @@ let gameState = null;
 let unsubscribeGame = null;
 let resultSyncKey = "";
 let resultSyncPromise = null;
+let lastForfeitNoticeKey = "";
 let selectedBid = 1;
 let openedMiniTeam = null;
 let lastAuctionKey = "";
@@ -5636,6 +5637,36 @@ function syncEmojiExperience(state){
   showEmojiReaction(state?.emojiEvent);
 }
 
+function showOpponentForfeitNotice(state,code){
+  const result=state?.result;
+  if(
+    isSpectator ||
+    !myTeam ||
+    !result?.forfeit ||
+    result.disconnected ||
+    result.inactive ||
+    result.forfeitedBy===uid
+  ) return;
+
+  const noticeKey=`${state.matchInstanceId||code}:${result.forfeitedBy}`;
+  if(lastForfeitNoticeKey===noticeKey) return;
+  lastForfeitNoticeKey=noticeKey;
+
+  const playerName=result.forfeitedBy===state.playerAUid
+    ? (state.playerAName||"Equipo Azul")
+    : (state.playerBName||"Equipo Rojo");
+
+  showGameDialog({
+    title:"Partido finalizado",
+    message:`${playerName} abandonó la partida y perdió el partido 3–0.`,
+    confirmText:"SALIR"
+  }).then(()=>{
+    if(roomCode!==code) return;
+    leaveRoom(true,false);
+    setLobbyMessage(`${playerName} abandonó la partida. Ganaste 3–0.`);
+  });
+}
+
 function listenToRoom(code){
   if(unsubscribeGame) unsubscribeGame();
   if(!isSpectator) startPlayerPresence(code).catch(error=>console.warn("No se pudo iniciar la presencia:",error));
@@ -5666,6 +5697,7 @@ function listenToRoom(code){
        usuarios puedan entrar como espectadores. Al terminar, se quitan del lobby. */
     if(state.result){
       remove(ref(db,`openRooms/${code}`)).catch(()=>{});
+      showOpponentForfeitNotice(state,code);
       if(!isSpectator){
         const leaveButton=$("leaveRoomButton");
         if(leaveButton){leaveButton.disabled=true;leaveButton.textContent="Guardando resultado...";}
@@ -5780,6 +5812,7 @@ function leaveRoom(clearUrl=true, closeActiveMatch=false){
   lastEmojiEventId="";
   emojiEventInitialized=false;
   emojiCooldownUntil=0;
+  lastForfeitNoticeKey="";
 
   if(db && oldRoomCode && closeActiveMatch && wasActivePlayer){
     /* Un resultado terminado debe permanecer hasta que la función del
