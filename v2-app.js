@@ -449,7 +449,7 @@ async function searchPublicPlayers(query){
     }
   }
 }
-async function loadPublicPlayerHistory(usernameKey){
+async function loadPublicPlayerHistory(usernameKey,{scrollToCard=false}={}){
   if(!functions||!usernameKey) return;
   const resultsNode=el("playerSearchResults");
   if(resultsNode) resultsNode.innerHTML='<div class="player-search-state">Cargando historial…</div>';
@@ -459,6 +459,9 @@ async function loadPublicPlayerHistory(usernameKey){
     playerSearchQuery=selectedPublicPlayer?.username||playerSearchQuery;
     playerSearchResults=[];
     renderHistory(latestHistoryData,latestHistoryStats);
+    if(scrollToCard){
+      el("historyPanelContent")?.querySelector(".public-history-card")?.scrollIntoView({behavior:"smooth",block:"start"});
+    }
   }catch(error){
     console.warn("No se pudo cargar el historial público:",error);
     if(resultsNode) resultsNode.innerHTML='<div class="player-search-state error">No se pudo cargar ese historial.</div>';
@@ -484,6 +487,9 @@ function bindHistorySearch(){
   el("playerSearchResults")?.addEventListener("click",event=>{
     const button=event.target.closest("[data-player-history]");
     if(button) loadPublicPlayerHistory(button.dataset.playerHistory);
+  });
+  document.querySelectorAll("#historyPanelContent .ranking-row[data-player-history]").forEach(button=>{
+    button.addEventListener("click",()=>loadPublicPlayerHistory(button.dataset.playerHistory,{scrollToCard:true}));
   });
   el("closePublicHistory")?.addEventListener("click",()=>{
     selectedPublicPlayer=null;
