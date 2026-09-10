@@ -2606,7 +2606,6 @@ let app = null;
 let currentProfile = null;
 let auth = null;
 let db = null;
-let serverTimeOffset = 0;
 let uid = null;
 let roomCode = null;
 let myTeam = null;
@@ -2632,6 +2631,8 @@ let lastSpectatorCount = null;
 let spectatorToastTimer = null;
 let turnTimeoutTimer = null;
 let turnTimeoutClaimInFlight = false;
+let serverTimeOffset = 0;
+let unsubscribeServerTimeOffset = null;
 let playerPresenceRef = null;
 let playerPresenceCode = "";
 let playerDisconnectHandle = null;
@@ -2664,11 +2665,21 @@ let miniInitPending = false;
 let miniResolutionTimer = null;
 let lastMiniFlashId = null;
 let lastMiniGuideKey = "";
+let miniBriefingSeenKey = "";
 
 function serverNow(){
   return Date.now()+serverTimeOffset;
 }
-let miniBriefingSeenKey = "";
+
+function listenToServerTime(){
+  if(!db) return;
+  if(unsubscribeServerTimeOffset) unsubscribeServerTimeOffset();
+  unsubscribeServerTimeOffset=onValue(ref(db,".info/serverTimeOffset"),snapshot=>{
+    const offset=Number(snapshot.val());
+    serverTimeOffset=Number.isFinite(offset)?offset:0;
+    if(gameState) syncTurnTimeout(gameState);
+  });
+}
 
 function firebaseConfigured(){
   return Boolean(
@@ -2951,8 +2962,8 @@ async function mutateGame(mutator){
       const next=JSON.parse(JSON.stringify(current));
       const changed=mutator(next,team);
       if(changed!==false){
-        /* La hora del servidor evita que dos celulares con relojes distintos
-           vean la advertencia antes de tiempo. */
+        /* La hora del servidor evita que una diferencia entre los relojes de
+           ambos teléfonos haga aparecer el aviso apenas termina la acción. */
         next.turnStartedAt=serverTimestamp();
         next.turnToken=Number(current.turnToken||0)+1;
       }
@@ -5239,7 +5250,7 @@ async function startSpectatorPresence(code){
         try{ await disconnectHandle.cancel(); }catch{}
         return;
       }
-      await set(targetRef,{uid,joinedAt:Date.now()});
+      await set(targetRef,{uid,joinedAt:serverTimestamp()});
     }catch(error){
       console.warn("No se pudo actualizar la presencia del espectador:",error);
     }
@@ -5987,9 +5998,7 @@ async function boot(){
   await startV2App(firebaseConfig,{
     onReady:async ({app:readyApp,auth:readyAuth,db:readyDb,user,profile})=>{
       app=readyApp; auth=readyAuth; db=readyDb; uid=user.uid; currentProfile=profile;
-      onValue(ref(db,".info/serverTimeOffset"),snapshot=>{
-        serverTimeOffset=Number(snapshot.val()||0);
-      });
+      listenToServerTime();
       if(firebaseStatus){firebaseStatus.textContent="✅ Firebase conectado como @"+profile.username;firebaseStatus.className="firebase-status ok";}
       setLobbyMessage("Creá una sala, publicá una mesa abierta o ingresá el código de tu rival.");
       loadSavedTableName(); listenToOpenRooms(); await tryResumeFromUrl();
