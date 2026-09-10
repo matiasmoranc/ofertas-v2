@@ -2606,6 +2606,7 @@ let app = null;
 let currentProfile = null;
 let auth = null;
 let db = null;
+let serverTimeOffset = 0;
 let uid = null;
 let roomCode = null;
 let myTeam = null;
@@ -2663,6 +2664,10 @@ let miniInitPending = false;
 let miniResolutionTimer = null;
 let lastMiniFlashId = null;
 let lastMiniGuideKey = "";
+
+function serverNow(){
+  return Date.now()+serverTimeOffset;
+}
 let miniBriefingSeenKey = "";
 
 function firebaseConfigured(){
@@ -2769,7 +2774,7 @@ function freshGameState(code, playerAUid, playerBUid=null, seed=(Date.now()>>>0)
     matchInstanceId: `${code}-${Date.now()}-${seed}`,
     result: null,
     miniMatch: null,
-    turnStartedAt: playerBUid ? Date.now() : null,
+    turnStartedAt: playerBUid ? serverTimestamp() : null,
     turnToken: playerBUid ? 1 : 0,
     message: playerBUid ? "🧤 Comienza la fase obligatoria de arqueros." : "Esperando al Equipo B..."
   };
@@ -2946,7 +2951,9 @@ async function mutateGame(mutator){
       const next=JSON.parse(JSON.stringify(current));
       const changed=mutator(next,team);
       if(changed!==false){
-        next.turnStartedAt=Date.now();
+        /* La hora del servidor evita que dos celulares con relojes distintos
+           vean la advertencia antes de tiempo. */
+        next.turnStartedAt=serverTimestamp();
         next.turnToken=Number(current.turnToken||0)+1;
       }
       return changed===false ? undefined : next;
@@ -5069,7 +5076,7 @@ function syncTurnTimeout(state){
       clearTurnTimeout();
       return;
     }
-    const elapsed=Date.now()-startedAt;
+    const elapsed=serverNow()-startedAt;
     const banner=$("turnTimeoutBanner");
     if(elapsed<TURN_WARNING_AFTER){
       banner?.classList.add("hidden");
@@ -5306,7 +5313,7 @@ async function enterTournamentRoom(code){
   if(state.currentPlayerIndex===null || state.currentPlayerIndex===undefined){
     state=JSON.parse(JSON.stringify(state));
     prepareNextAuctionInState(state,"🏆 Partido de torneo iniciado.");
-    state.turnStartedAt=Date.now();
+    state.turnStartedAt=serverTimestamp();
     state.turnToken=Number(state.turnToken||0)+1;
     await update(roomRef,state);
     const confirmed=await get(roomRef);
@@ -5413,7 +5420,7 @@ async function joinRoom(forcedCode=null, fromOpenRoom=false){
           "✅ Equipo B conectado."
         );
       }
-      state.turnStartedAt=Date.now();
+      state.turnStartedAt=serverTimestamp();
       state.turnToken=Number(state.turnToken||0)+1;
     }
 
@@ -5980,6 +5987,9 @@ async function boot(){
   await startV2App(firebaseConfig,{
     onReady:async ({app:readyApp,auth:readyAuth,db:readyDb,user,profile})=>{
       app=readyApp; auth=readyAuth; db=readyDb; uid=user.uid; currentProfile=profile;
+      onValue(ref(db,".info/serverTimeOffset"),snapshot=>{
+        serverTimeOffset=Number(snapshot.val()||0);
+      });
       if(firebaseStatus){firebaseStatus.textContent="✅ Firebase conectado como @"+profile.username;firebaseStatus.className="firebase-status ok";}
       setLobbyMessage("Creá una sala, publicá una mesa abierta o ingresá el código de tu rival.");
       loadSavedTableName(); listenToOpenRooms(); await tryResumeFromUrl();
