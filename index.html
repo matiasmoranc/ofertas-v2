@@ -5644,26 +5644,30 @@ function showOpponentForfeitNotice(state,code){
     !myTeam ||
     !result?.forfeit ||
     result.disconnected ||
-    result.inactive ||
     result.forfeitedBy===uid
   ) return;
 
-  const noticeKey=`${state.matchInstanceId||code}:${result.forfeitedBy}`;
+  const noticeKey=`${state.matchInstanceId||code}:${result.forfeitedBy}:${result.inactive?"inactive":"left"}`;
   if(lastForfeitNoticeKey===noticeKey) return;
   lastForfeitNoticeKey=noticeKey;
 
   const playerName=result.forfeitedBy===state.playerAUid
     ? (state.playerAName||"Equipo Azul")
     : (state.playerBName||"Equipo Rojo");
+  const inactive=Boolean(result.inactive);
 
   showGameDialog({
-    title:"Partido finalizado",
-    message:`${playerName} abandonó la partida y perdió el partido 3–0.`,
+    title:inactive?"Tiempo agotado":"Tu rival se desconectó",
+    message:inactive
+      ? `${playerName} no realizó una acción a tiempo. Ganaste la partida 3–0.`
+      : `${playerName} se desconectó de la partida. Ganaste la partida 3–0.`,
     confirmText:"SALIR"
   }).then(()=>{
     if(roomCode!==code) return;
     leaveRoom(true,false);
-    setLobbyMessage(`${playerName} abandonó la partida. Ganaste 3–0.`);
+    setLobbyMessage(inactive
+      ? `${playerName} agotó su tiempo. Ganaste 3–0.`
+      : `${playerName} abandonó la partida. Ganaste 3–0.`);
   });
 }
 
