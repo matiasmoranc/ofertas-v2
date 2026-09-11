@@ -534,7 +534,8 @@ exports.openTournamentMatch=onCall(async request=>{
       current.result={
         goalsA:winner==="A"?3:0,
         goalsB:winner==="B"?3:0,
-        winner,forfeit:true,forfeitedBy:inactiveUid,inactive:true,fromMiniMatch:false
+        winner,forfeit:true,forfeitedBy:inactiveUid,inactive:true,fromMiniMatch:false,
+        decidedAt:ServerValue.TIMESTAMP
       };
       return current;
     });
@@ -659,7 +660,8 @@ exports.openTournamentMatch=onCall(async request=>{
         winner,
         forfeit:true,
         forfeitedBy:uid,
-        fromMiniMatch:false
+        fromMiniMatch:false,
+        decidedAt:ServerValue.TIMESTAMP
       };
       return current;
     });
