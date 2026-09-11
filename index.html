@@ -5054,14 +5054,70 @@ function clearTurnTimeout(){
   $("turnTimeoutBanner")?.classList.add("hidden");
 }
 
+async function writeForfeitResult(code,{inactive=false,startedAt=0}={}){
+  if(!db || !uid || !code) throw new Error("No se pudo identificar la partida.");
+  const gameRef=ref(db,`games/${code}`);
+  const transaction=await runTransaction(gameRef,current=>{
+    if(!current || current.result || current.status!=="playing") return;
+    const loser=current.playerAUid===uid?"A":current.playerBUid===uid?"B":null;
+    if(!loser) return;
+
+    if(inactive){
+      if(Number(current.turnStartedAt||0)!==Number(startedAt)) return;
+      const inactiveTeam=activeTurnTeam(current);
+      if(!inactiveTeam || loser===inactiveTeam) return;
+      const timedOutUid=inactiveTeam==="A"?current.playerAUid:current.playerBUid;
+      const winner=inactiveTeam==="A"?"B":"A";
+      current.status="finished";
+      current.message="⌛ Tiempo agotado. Victoria 3–0 por inactividad.";
+      current.result={
+        goalsA:winner==="A"?3:0,
+        goalsB:winner==="B"?3:0,
+        winner,
+        forfeit:true,
+        forfeitedBy:timedOutUid,
+        inactive:true,
+        fromMiniMatch:false,
+        decidedAt:serverTimestamp()
+      };
+      return current;
+    }
+
+    const winner=loser==="A"?"B":"A";
+    const loserName=loser==="A"?(current.playerAName||"Equipo Azul"):(current.playerBName||"Equipo Rojo");
+    current.status="finished";
+    current.message=`🏳️ ${loserName} abandonó. Victoria 3–0.`;
+    current.result={
+      goalsA:winner==="A"?3:0,
+      goalsB:winner==="B"?3:0,
+      winner,
+      forfeit:true,
+      forfeitedBy:uid,
+      fromMiniMatch:false,
+      decidedAt:serverTimestamp()
+    };
+    return current;
+  },{applyLocally:false});
+
+  const finalState=transaction.snapshot.val();
+  if(!finalState?.result) throw new Error("No se pudo registrar el resultado.");
+  await remove(ref(db,`openRooms/${code}`)).catch(()=>{});
+  await syncOfficialGameResult(code);
+  return finalState;
+}
+
 async function claimInactiveTurn(code,startedAt){
   if(turnTimeoutClaimInFlight || isSpectator || !myTeam || !code) return;
   turnTimeoutClaimInFlight=true;
   try{
-    await claimInactiveMatch(code,startedAt);
+    await writeForfeitResult(code,{inactive:true,startedAt});
   }catch(error){
-    if(!["functions/failed-precondition","functions/not-found","functions/permission-denied"].includes(error?.code)){
-      console.warn("No se pudo resolver la inactividad:",error);
+    try{
+      await claimInactiveMatch(code,startedAt);
+    }catch(serverError){
+      if(!["functions/failed-precondition","functions/not-found","functions/permission-denied"].includes(serverError?.code)){
+        console.warn("No se pudo resolver la inactividad:",serverError);
+      }
     }
   }finally{
     turnTimeoutClaimInFlight=false;
@@ -5992,7 +6048,7 @@ $("leaveRoomButton").addEventListener("click",async()=>{
     button.disabled=true;
     button.textContent="Registrando abandono...";
     try{
-      await forfeitOpenMatch(activeCode);
+      await writeForfeitResult(activeCode);
       leaveRoom(true,false);
       setLobbyMessage("Abandonaste el partido. Tu rival ganó 3–0.");
     }catch(error){
