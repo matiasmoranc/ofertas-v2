@@ -5102,7 +5102,9 @@ async function writeForfeitResult(code,{inactive=false,startedAt=0}={}){
   const finalState=transaction.snapshot.val();
   if(!finalState?.result) throw new Error("No se pudo registrar el resultado.");
   await remove(ref(db,`openRooms/${code}`)).catch(()=>{});
-  await syncOfficialGameResult(code);
+  /* El resultado ya quedó guardado y dispara el procesamiento automático.
+     No esperamos un segundo guardado: evitamos el error INTERNAL y permitimos
+     que quien abandonó vuelva al lobby inmediatamente. */
   return finalState;
 }
 
