@@ -2979,7 +2979,7 @@ async function mutateGame(mutator){
         const openRef=ref(db,`openRooms/${roomCode}`);
         const openSnap=await get(openRef);
         if(openSnap.exists()){
-          await update(openRef,{lastActivity:Date.now()});
+          await update(openRef,{lastActivity:serverTimestamp()});
         }
       }catch(activityError){
         console.warn("No se pudo actualizar la actividad de la mesa:",activityError);
@@ -4736,7 +4736,7 @@ async function deleteExpiredOpenRoom(code,roomData){
     if(!latestSnap.exists()) return;
 
     const latest=latestSnap.val() || roomData || {};
-    const now=Date.now();
+    const now=serverNow();
     const isPlaying=latest.status==="playing";
 
     const activityBase=isPlaying
@@ -4772,7 +4772,7 @@ function renderOpenRooms(openRooms){
   const count=$("openRoomsCount");
   if(!list || !count) return;
 
-  const now=Date.now();
+  const now=serverNow();
 
   const rooms=Object.entries(openRooms || {})
     .map(([code,data])=>({code,...data}))
@@ -4822,7 +4822,7 @@ function renderOpenRooms(openRooms){
 
     const code=document.createElement("div");
     code.className="open-room-code";
-    const ageMinutes=Math.max(0,Math.floor((Date.now()-(room.createdAt||Date.now()))/60000));
+    const ageMinutes=Math.max(0,Math.floor((serverNow()-(room.createdAt||serverNow()))/60000));
     const isPlaying=room.status==="playing";
     code.textContent=isPlaying
       ? `SALA ${room.code} · 🔴 PARTIDO EN JUEGO`
@@ -4926,8 +4926,8 @@ async function createOpenRoom(){
         name,
         roomCode:code,
         ownerUid:uid,
-        createdAt:Date.now(),
-        lastActivity:Date.now(),
+        createdAt:serverTimestamp(),
+        lastActivity:serverTimestamp(),
         status:"waiting"
       });
 
@@ -5519,8 +5519,8 @@ async function joinRoom(forcedCode=null, fromOpenRoom=false){
       try{
         await update(ref(db,`openRooms/${code}`),{
           status:"playing",
-          startedAt:Date.now(),
-          lastActivity:Date.now()
+          startedAt:serverTimestamp(),
+          lastActivity:serverTimestamp()
         });
       }catch(error){
         console.warn("No se pudo marcar la mesa como partido en juego:",error);
