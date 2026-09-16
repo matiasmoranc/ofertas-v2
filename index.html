@@ -4760,7 +4760,7 @@ async function deleteExpiredOpenRoom(code,roomData){
 }
 
 function shareOpenRoom(room){
-  const url=`${location.origin}${location.pathname}?room=${encodeURIComponent(room.code)}`;
+  const url=`${location.origin}${location.pathname}?room=${encodeURIComponent(room.code)}&join=1`;
   const message=`⚽ Te invito a jugar en la mesa pública “${room.name}” de Mercado Élite 5.\n${url}`;
   const whatsappUrl=`https://wa.me/?text=${encodeURIComponent(message)}`;
   const popup=window.open(whatsappUrl,"_blank","noopener,noreferrer");
@@ -5785,6 +5785,7 @@ async function tryResumeFromUrl(){
   const params=new URLSearchParams(location.search);
   const code=normalizeCode(params.get("room"));
   const wantsWatch=params.get("watch")==="1";
+  const wantsDirectJoin=params.get("join")==="1";
   if(code.length!==6 || !db || !uid) return;
 
   const snap=await get(ref(db,`games/${code}`));
@@ -5815,6 +5816,20 @@ async function tryResumeFromUrl(){
     const openSnap=await get(ref(db,`openRooms/${code}`));
     currentRoomIsOpen=openSnap.exists();
     listenToRoom(code);
+  }
+  else if(wantsDirectJoin){
+    const openSnap=await get(ref(db,`openRooms/${code}`));
+    if(openSnap.exists()){
+      if(state.playerAUid && state.playerBUid){
+        await watchOpenRoom(code);
+      }else{
+        await joinRoom(code,true);
+      }
+      return;
+    }
+
+    $("roomCodeInput").value=code;
+    setLobbyMessage("La mesa compartida ya no está disponible.",true);
   }
   else{
     $("roomCodeInput").value=code;
