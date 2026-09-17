@@ -2729,10 +2729,9 @@ function clamp(value,min,max){ return Math.max(min,Math.min(max,value)); }
 function playerByIndex(index){ return Number.isInteger(index) ? players[index] : null; }
 function teamEntries(state, team){ return Array.isArray(state?.teams?.[team]) ? state.teams[team] : []; }
 function teamIsFullState(state, team){ return teamEntries(state,team).length >= 5; }
-function playersStillNeededState(state,team){ return Math.max(0,5-teamEntries(state,team).length); }
 function hasProtectedExtraPassState(state,team){
   return (state.consecutivePasses?.[team] || 0) >= 3 &&
-    playersStillNeededState(state,team) >= 2 &&
+    !teamIsFullState(state,team) &&
     (state.money?.[team] || 0) > 0;
 }
 function maxBidAllowedState(state,team){
@@ -3052,8 +3051,8 @@ async function passBid(){
     }
 
     /* El pase de protección no aumenta el contador: existe para evitar que
-       el rival pueda dejar sin respuesta a un equipo que aún necesita
-       comprar por lo menos dos jugadores. */
+       el rival pueda dejar sin respuesta a un equipo que todavía puede
+       comprar algún jugador. */
     if(!cannotOutbid && !protectedExtraPass){
       state.consecutivePasses[team]=(state.consecutivePasses[team] || 0)+1;
     }
