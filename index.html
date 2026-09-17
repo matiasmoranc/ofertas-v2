@@ -2621,6 +2621,7 @@ let lastAuctionKey = "";
 let lastProtectedPassNoticeKey = "";
 let unsubscribeOpenRooms = null;
 let currentRoomIsOpen = false;
+let currentOpenRoomName = "";
 let latestOpenRooms = {};
 let openRoomsCleanupTimer = null;
 let pendingOpenRoomAction = "";
@@ -3793,6 +3794,16 @@ async function playMatch(){
 }
 
 async function resetGame(){
+  if(myTeam!=="A" || !gameState || !roomCode) return;
+  const rematchCode=roomCode;
+  const shouldRepublish=Boolean(currentRoomIsOpen || gameState.isOpenRoom);
+  const rematchName=sanitizeTableName(
+    gameState.openRoomName ||
+    currentOpenRoomName ||
+    $("tableNameInput")?.value ||
+    `Mesa de ${gameState.playerAName||"Equipo Azul"}`
+  );
+
   if(teamIntroTimer){
     clearTimeout(teamIntroTimer);
     teamIntroTimer=null;
@@ -3816,11 +3827,29 @@ async function resetGame(){
     const reset=freshGameState(state.roomCode,state.playerAUid,state.playerBUid,seed);
     reset.playerAName=playerAName||"Equipo Azul";
     reset.playerBName=playerBName||"Equipo Rojo";
+    if(shouldRepublish){
+      reset.isOpenRoom=true;
+      reset.openRoomName=rematchName;
+    }
     Object.keys(state).forEach(k=>delete state[k]);
     Object.assign(state,reset);
     if(state.playerBUid) prepareNextAuctionInState(state,"🔄 Nueva partida.");
     return true;
   });
+
+  if(shouldRepublish && rematchName){
+    await set(ref(db,`openRooms/${rematchCode}`),{
+      name:rematchName,
+      roomCode:rematchCode,
+      ownerUid:gameState?.playerAUid || uid,
+      createdAt:serverTimestamp(),
+      startedAt:serverTimestamp(),
+      lastActivity:serverTimestamp(),
+      status:"playing"
+    });
+    currentRoomIsOpen=true;
+    currentOpenRoomName=rematchName;
+  }
 }
 
 function renderTeam(team){
@@ -4964,7 +4993,13 @@ async function createOpenRoom(){
 
       const tx=await runTransaction(
         roomRef,
-        current=>current ? undefined : freshGameState(code,uid,null,Date.now()>>>0),
+        current=>{
+          if(current) return;
+          const state=freshGameState(code,uid,null,Date.now()>>>0);
+          state.isOpenRoom=true;
+          state.openRoomName=name;
+          return state;
+        },
         {applyLocally:false}
       );
 
@@ -4981,6 +5016,7 @@ async function createOpenRoom(){
 
       saveTableName(name);
       currentRoomIsOpen=true;
+      currentOpenRoomName=name;
       roomCode=code;
       myTeam="A";
       history.replaceState(null,"",`${location.pathname}?room=${code}`);
@@ -5397,7 +5433,8 @@ async function watchOpenRoom(code){
     roomCode=normalized;
     myTeam=null;
     isSpectator=true;
-    currentRoomIsOpen=!state.tournamentId;
+    currentRoomIsOpen=Boolean(state.isOpenRoom || !state.tournamentId);
+    currentOpenRoomName=state.openRoomName || "";
     hasShownTeamIntro=true;
     gameState=state;
 
@@ -5575,7 +5612,8 @@ async function joinRoom(forcedCode=null, fromOpenRoom=false){
       }
     }
 
-    currentRoomIsOpen=Boolean(fromOpenRoom);
+    currentRoomIsOpen=Boolean(fromOpenRoom || confirmed.isOpenRoom);
+    currentOpenRoomName=confirmed.openRoomName || "";
     roomCode=code;
     myTeam="B";
 
@@ -5862,7 +5900,8 @@ async function tryResumeFromUrl(){
     myTeam=state.playerAUid===uid?"A":"B";
     gameState=state;
     const openSnap=await get(ref(db,`openRooms/${code}`));
-    currentRoomIsOpen=openSnap.exists();
+    currentRoomIsOpen=Boolean(openSnap.exists() || state.isOpenRoom);
+    currentOpenRoomName=state.openRoomName || openSnap.val()?.name || "";
     listenToRoom(code);
   }
   else if(wantsDirectJoin){
@@ -5957,6 +5996,7 @@ function leaveRoom(clearUrl=true, closeActiveMatch=false){
   }
 
   currentRoomIsOpen=false;
+  currentOpenRoomName="";
   hasShownTeamIntro=false;
   roomCode=null; myTeam=null; isSpectator=false; gameState=null; openedMiniTeam=null; lastAuctionKey=""; lastProtectedPassNoticeKey="";
   gameScreen.classList.add("screen-hidden"); lobbyScreen.classList.remove("screen-hidden"); document.body.classList.add("in-lobby"); $("roomReady").classList.add("screen-hidden");
