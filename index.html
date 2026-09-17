@@ -2618,6 +2618,7 @@ let lastForfeitNoticeKey = "";
 let selectedBid = 1;
 let openedMiniTeam = null;
 let lastAuctionKey = "";
+let lastProtectedPassNoticeKey = "";
 let unsubscribeOpenRooms = null;
 let currentRoomIsOpen = false;
 let latestOpenRooms = {};
@@ -4598,10 +4599,33 @@ function updateScreen(){
   const maximumBid=myTeam ? maxBidAllowedState(gameState,myTeam) : 0;
   const canOffer=myTurn && hasMoney && maximumBid>gameState.currentBid;
 
+  const protectedBidLimit=myTeam ? maximumBid<(gameState.money?.[myTeam] || 0) : false;
   $("bidMinus").disabled=!canOffer || selectedBid<=gameState.currentBid+1;
-  $("bidPlus").disabled=!canOffer || selectedBid>=maximumBid;
+  /* Si el límite especial está activo, dejamos + tocable en el máximo
+     para poder explicar por qué no puede subir más. */
+  $("bidPlus").disabled=!myTurn || !hasMoney || (!protectedBidLimit && (!canOffer || selectedBid>=maximumBid));
   $("offerButton").disabled=!canOffer || selectedBid<=gameState.currentBid || selectedBid>maximumBid;
   $("passButton").disabled=!myTurn || passIsBlocked;
+
+  if(myTurn && protectedExtraPass){
+    const noticeKey=`${gameState.matchInstanceId||roomCode}:${gameState.currentPlayerIndex}:${gameState.turnToken||0}:${myTeam}`;
+    if(lastProtectedPassNoticeKey!==noticeKey){
+      lastProtectedPassNoticeKey=noticeKey;
+      setTimeout(()=>{
+        if(
+          roomCode &&
+          gameState &&
+          canCurrentUserAct(gameState) &&
+          hasProtectedExtraPassState(gameState,myTeam)
+        ){
+          window.gameAlert(
+            "Pase extra habilitado",
+            "Ya usaste tus 3 pases. Podés ofertar o usar este pase extra para no tener que gastar todo tu dinero."
+          );
+        }
+      },50);
+    }
+  }
 
   if(isSpectator){
     $("offerButton").textContent="👁 SOLO LECTURA";
@@ -5934,16 +5958,27 @@ function leaveRoom(clearUrl=true, closeActiveMatch=false){
 
   currentRoomIsOpen=false;
   hasShownTeamIntro=false;
-  roomCode=null; myTeam=null; isSpectator=false; gameState=null; openedMiniTeam=null; lastAuctionKey="";
+  roomCode=null; myTeam=null; isSpectator=false; gameState=null; openedMiniTeam=null; lastAuctionKey=""; lastProtectedPassNoticeKey="";
   gameScreen.classList.add("screen-hidden"); lobbyScreen.classList.remove("screen-hidden"); document.body.classList.add("in-lobby"); $("roomReady").classList.add("screen-hidden");
   if($("connectionBar")) $("connectionBar").classList.remove("hidden");
   if(clearUrl) history.replaceState(null,"",location.pathname);
+}
+
+function protectedBidLimitMessage(state,team,maximum){
+  const opponent=otherPlayer(team);
+  const opponentName=opponent==="A"?(state.playerAName||"Equipo Azul"):(state.playerBName||"Equipo Rojo");
+  return `No podés ofertar €${state.money?.[opponent] || 0} o más. ${opponentName} ya usó sus 3 pases, por eso tu oferta máxima es €${maximum}.`;
 }
 
 function changeBid(delta){
   if(!gameState || !canCurrentUserAct(gameState) || !myTeam || gameState.money[myTeam]<=0) return;
   const min=Math.max(1,(gameState.currentBid||0)+1);
   const maximum=maxBidAllowedState(gameState,myTeam);
+  const protectedLimit=maximum<(gameState.money?.[myTeam] || 0);
+  if(delta>0 && protectedLimit && (maximum<min || selectedBid+delta>maximum)){
+    window.gameAlert("Oferta limitada",protectedBidLimitMessage(gameState,myTeam,maximum));
+    return;
+  }
   if(maximum<min) return;
   selectedBid=clamp(selectedBid+delta,min,maximum);
   $("bidValue").textContent=selectedBid;
