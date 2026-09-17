@@ -2729,6 +2729,20 @@ function clamp(value,min,max){ return Math.max(min,Math.min(max,value)); }
 function playerByIndex(index){ return Number.isInteger(index) ? players[index] : null; }
 function teamEntries(state, team){ return Array.isArray(state?.teams?.[team]) ? state.teams[team] : []; }
 function teamIsFullState(state, team){ return teamEntries(state,team).length >= 5; }
+function playersStillNeededState(state,team){ return Math.max(0,5-teamEntries(state,team).length); }
+function hasProtectedExtraPassState(state,team){
+  return (state.consecutivePasses?.[team] || 0) >= 3 &&
+    playersStillNeededState(state,team) >= 2 &&
+    (state.money?.[team] || 0) > 0;
+}
+function maxBidAllowedState(state,team){
+  let maximum=Math.max(0,state.money?.[team] || 0);
+  const opponent=otherPlayer(team);
+  if(hasProtectedExtraPassState(state,opponent)){
+    maximum=Math.min(maximum,Math.max(0,(state.money?.[opponent] || 0)-1));
+  }
+  return maximum;
+}
 function hasGoalkeeperState(state, team){ return teamEntries(state,team).some(entry => playerByIndex(entry.playerIndex)?.pos === "GP"); }
 function teamCannotAddState(state, team){
   return teamIsFullState(state,team) || (state.money?.[team] || 0) <= 0;
@@ -2996,7 +3010,8 @@ async function makeBid(){
     if(state.currentBidder!==team || state.currentPlayerIndex===null) return false;
     if(teamIsFullState(state,team) || state.money[team]<=0) return false;
     const amount=selectedBid;
-    if(amount<=state.currentBid || amount>state.money[team]) return false;
+    const maximum=maxBidAllowedState(state,team);
+    if(amount<=state.currentBid || amount>maximum) return false;
     state.currentBid=amount;
     state.leader=team;
     state.zeroBidPasses=0;
@@ -3029,14 +3044,17 @@ async function passBid(){
     const maxAffordableBid = state.money[team] || 0;
     const cannotOutbid = state.leader && maxAffordableBid <= state.currentBid;
 
-    if(!cannotOutbid && (state.consecutivePasses[team] || 0) >= 3){
+    const protectedExtraPass=hasProtectedExtraPassState(state,team);
+
+    if(!cannotOutbid && (state.consecutivePasses[team] || 0) >= 3 && !protectedExtraPass){
       state.message="⚠️ Ya pasaste 3 veces consecutivas. Debés ofertar para volver a habilitar el pase.";
       return true;
     }
 
-    /* Solo contamos el pase para el límite cuando realmente tenía
-       la posibilidad de seguir compitiendo por el jugador. */
-    if(!cannotOutbid){
+    /* El pase de protección no aumenta el contador: existe para evitar que
+       el rival pueda dejar sin respuesta a un equipo que aún necesita
+       comprar por lo menos dos jugadores. */
+    if(!cannotOutbid && !protectedExtraPass){
       state.consecutivePasses[team]=(state.consecutivePasses[team] || 0)+1;
     }
 
@@ -4559,7 +4577,9 @@ function updateScreen(){
   const auctionKey=`${gameState.currentPlayerIndex}|${gameState.currentBid}|${gameState.currentBidder}`;
   if(auctionKey!==lastAuctionKey){
     selectedBid=Math.max(1,(gameState.currentBid||0)+1);
-    if(myTeam && gameState.currentBidder===myTeam) selectedBid=Math.min(selectedBid,gameState.money[myTeam]);
+    if(myTeam && gameState.currentBidder===myTeam){
+      selectedBid=Math.min(selectedBid,maxBidAllowedState(gameState,myTeam));
+    }
     lastAuctionKey=auctionKey;
   }
   $("bidValue").textContent=selectedBid;
@@ -4573,12 +4593,15 @@ function updateScreen(){
     gameState.leader &&
     (gameState.money[myTeam] || 0) <= (gameState.currentBid || 0)
   );
-  const passLimitReached=myPassesUsed>=3 && !cannotOutbidNow;
+  const protectedExtraPass=myTeam ? hasProtectedExtraPassState(gameState,myTeam) : false;
+  const passLimitReached=myPassesUsed>=3 && !cannotOutbidNow && !protectedExtraPass;
   const passIsBlocked=requiredPassDisabled || passLimitReached;
+  const maximumBid=myTeam ? maxBidAllowedState(gameState,myTeam) : 0;
+  const canOffer=myTurn && hasMoney && maximumBid>gameState.currentBid;
 
-  $("bidMinus").disabled=!myTurn || !hasMoney;
-  $("bidPlus").disabled=!myTurn || !hasMoney;
-  $("offerButton").disabled=!myTurn || !hasMoney || selectedBid<=gameState.currentBid;
+  $("bidMinus").disabled=!canOffer || selectedBid<=gameState.currentBid+1;
+  $("bidPlus").disabled=!canOffer || selectedBid>=maximumBid;
+  $("offerButton").disabled=!canOffer || selectedBid<=gameState.currentBid || selectedBid>maximumBid;
   $("passButton").disabled=!myTurn || passIsBlocked;
 
   if(isSpectator){
@@ -4592,7 +4615,9 @@ function updateScreen(){
     $("passButton").textContent="PASAR";
   } else {
     $("offerButton").textContent=`OFERTAR €${selectedBid}`;
-    if(passLimitReached){
+    if(protectedExtraPass){
+      $("passButton").textContent="PASAR — PASE EXTRA";
+    }else if(passLimitReached){
       $("passButton").textContent="SIN PASES — DEBÉS OFERTAR";
     }else if(requiredPassDisabled){
       $("passButton").textContent="DEBÉS OFERTAR €1";
@@ -5919,7 +5944,9 @@ function leaveRoom(clearUrl=true, closeActiveMatch=false){
 function changeBid(delta){
   if(!gameState || !canCurrentUserAct(gameState) || !myTeam || gameState.money[myTeam]<=0) return;
   const min=Math.max(1,(gameState.currentBid||0)+1);
-  selectedBid=clamp(selectedBid+delta,min,gameState.money[myTeam]);
+  const maximum=maxBidAllowedState(gameState,myTeam);
+  if(maximum<min) return;
+  selectedBid=clamp(selectedBid+delta,min,maximum);
   $("bidValue").textContent=selectedBid;
   $("offerButton").textContent=`OFERTAR €${selectedBid}`;
 }
