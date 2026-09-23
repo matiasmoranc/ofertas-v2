@@ -1124,6 +1124,115 @@ header p{
   z-index:4;
   font-size:20px;
 }
+.mini-goal-scene{
+  position:absolute;
+  inset:12px 12px 44px;
+  z-index:4;
+  pointer-events:none;
+}
+.mini-big-goal{
+  position:absolute;
+  left:4%;
+  right:4%;
+  top:18px;
+  height:245px;
+  border:8px solid #f8fbff;
+  border-bottom-width:6px;
+  border-radius:8px 8px 3px 3px;
+  box-shadow:0 0 0 2px rgba(0,0,0,.28),0 0 24px rgba(255,255,255,.28);
+  background:linear-gradient(180deg,rgba(4,16,10,.14),rgba(1,8,4,.36));
+  overflow:hidden;
+}
+.mini-goal-net{
+  position:absolute;
+  inset:0;
+  opacity:.42;
+  background:
+    repeating-linear-gradient(0deg,transparent 0 20px,rgba(255,255,255,.65) 21px 23px),
+    repeating-linear-gradient(90deg,transparent 0 28px,rgba(255,255,255,.65) 29px 31px);
+}
+.mini-goalkeeper{
+  --keeper-color:#ffd454;
+  position:absolute;
+  left:50%;
+  bottom:15px;
+  width:96px;
+  height:132px;
+  transform:translateX(-50%);
+  z-index:6;
+  transition:left .4s cubic-bezier(.2,.8,.2,1),transform .4s cubic-bezier(.2,.8,.2,1);
+}
+.mini-keeper-head{
+  position:absolute;
+  left:37px;
+  top:0;
+  width:25px;
+  height:25px;
+  border-radius:50%;
+  background:#e7b37f;
+  box-shadow:0 0 0 3px rgba(0,0,0,.22);
+}
+.mini-keeper-body{
+  position:absolute;
+  left:29px;
+  top:27px;
+  width:42px;
+  height:58px;
+  border-radius:13px 13px 8px 8px;
+  background:linear-gradient(145deg,var(--keeper-color),#8cbf23);
+  border:2px solid rgba(0,0,0,.25);
+}
+.mini-keeper-arm,.mini-keeper-leg{
+  position:absolute;
+  display:block;
+  height:13px;
+  border-radius:999px;
+  background:var(--keeper-color);
+  transform-origin:center;
+  border:2px solid rgba(0,0,0,.2);
+}
+.mini-keeper-arm{top:42px;width:48px;}
+.mini-keeper-arm.left{left:-4px;transform:rotate(-24deg);}
+.mini-keeper-arm.right{right:-4px;transform:rotate(24deg);}
+.mini-keeper-leg{top:88px;width:49px;background:#d7f2ff;}
+.mini-keeper-leg.left{left:8px;transform:rotate(-63deg);}
+.mini-keeper-leg.right{right:8px;transform:rotate(63deg);}
+.mini-keeper-glove{
+  position:absolute;
+  top:28px;
+  font-size:24px;
+  filter:drop-shadow(0 2px 3px rgba(0,0,0,.45));
+}
+.mini-keeper-glove.left{left:-17px;transform:rotate(-28deg);}
+.mini-keeper-glove.right{right:-17px;transform:scaleX(-1) rotate(-28deg);}
+.mini-goalkeeper.dive-left{transform:translateX(-50%) rotate(-12deg) scale(1.06);}
+.mini-goalkeeper.dive-right{transform:translateX(-50%) rotate(12deg) scale(1.06);}
+.mini-goalkeeper.dive-center{transform:translateX(-50%) scale(1.12);}
+.mini-penalty-spot{
+  position:absolute;
+  left:50%;
+  bottom:14px;
+  width:10px;
+  height:10px;
+  transform:translateX(-50%);
+  border-radius:50%;
+  background:#fff;
+  box-shadow:0 0 9px rgba(255,255,255,.75);
+}
+.mini-pitch.shootout-mode{
+  background:
+    linear-gradient(90deg,transparent 0 33.333%,rgba(255,255,255,.035) 33.333% 66.666%,transparent 66.666%),
+    linear-gradient(180deg,#267d49,#155f35);
+}
+.mini-pitch.shootout-mode>.mini-goal,
+.mini-pitch.shootout-mode>.mini-step-line,
+.mini-pitch.shootout-mode>.mini-trail-svg,
+.mini-pitch.shootout-mode>.mini-defender-mark{display:none;}
+.mini-pitch.shootout-mode:before,
+.mini-pitch.shootout-mode:after{border-left-style:solid;border-left-color:rgba(255,255,255,.14);}
+.mini-pitch.event-save{animation:miniRecoveryPitch 1.05s ease;}
+.mini-event-flash.event-save.show{animation:miniRecoveryFlash 1.3s ease forwards;}
+
 .mini-step-line{
   position:absolute;
   left:0;right:0;
@@ -2293,6 +2402,22 @@ header p{
 
     <div id="miniPitch" class="mini-pitch">
       <div class="mini-goal">🥅</div>
+      <div id="miniGoalScene" class="mini-goal-scene hidden" aria-hidden="true">
+        <div class="mini-big-goal">
+          <div class="mini-goal-net"></div>
+          <div id="miniGoalkeeper" class="mini-goalkeeper">
+            <span class="mini-keeper-head"></span>
+            <span class="mini-keeper-body"></span>
+            <span class="mini-keeper-arm left"></span>
+            <span class="mini-keeper-arm right"></span>
+            <span class="mini-keeper-leg left"></span>
+            <span class="mini-keeper-leg right"></span>
+            <span class="mini-keeper-glove left">🧤</span>
+            <span class="mini-keeper-glove right">🧤</span>
+          </div>
+        </div>
+        <div class="mini-penalty-spot"></div>
+      </div>
       <div class="mini-step-line" style="top:27%"></div>
       <div class="mini-step-line" style="top:49%"></div>
       <div class="mini-step-line" style="top:71%"></div>
@@ -3489,11 +3614,6 @@ async function chooseMiniLane(lane){
           toLane:mini.attackPick,
           toProgress:mini.progress
         });
-        if(mini.progress >= mini.advancesNeeded[attacker]){
-          mini.score[attacker]=(mini.score[attacker]||0)+1;
-          endsAttack=true;
-          type="goal";
-        }
       }
 
       mini.phase="resolved";
@@ -3502,10 +3622,44 @@ async function chooseMiniLane(lane){
         id:mini.resolutionId,
         type,
         endsAttack,
+        shot:false,
         attackLane:mini.attackPick,
         defenseLane:mini.defensePick
       };
-      state.message=type==="goal"?`⚽ Gol de ${teamLabel(attacker)}.`:type==="recovery"?`🛡️ ${teamLabel(defender)} recupera la pelota.`:`🏃 ${teamLabel(attacker)} avanza.`;
+      state.message=type==="recovery"
+        ?`🛡️ ${teamLabel(defender)} recupera la pelota.`
+        :`🏃 ${teamLabel(attacker)} llega a zona de definición.`;
+      return true;
+    }
+
+    if(mini.phase==="shot_attack"){
+      if(team!==attacker || mini.attackPick) return false;
+      mini.attackPick=lane;
+      mini.phase="shot_defense";
+      state.message=`⚽ ${teamLabel(attacker)} eligió dónde patear. Esperando al golero.`;
+      return true;
+    }
+
+    if(mini.phase==="shot_defense"){
+      if(team!==defender || !mini.attackPick || mini.defensePick) return false;
+      mini.defensePick=lane;
+      const saved=mini.attackPick===mini.defensePick;
+      const type=saved?"save":"goal";
+      if(!saved) mini.score[attacker]=(mini.score[attacker]||0)+1;
+
+      mini.phase="resolved";
+      mini.resolutionId=Number(mini.resolutionId||0)+1;
+      mini.resolution={
+        id:mini.resolutionId,
+        type,
+        endsAttack:true,
+        shot:true,
+        attackLane:mini.attackPick,
+        defenseLane:mini.defensePick
+      };
+      state.message=saved
+        ?`🧤 ¡Atajada de ${teamLabel(defender)}!`
+        :`⚽ Gol de ${teamLabel(attacker)}.`;
       return true;
     }
     return false;
@@ -3522,7 +3676,11 @@ async function advanceMiniAfterResolution(expectedId){
       mini.attackPick=null;
       mini.defensePick=null;
       mini.resolution=null;
-      mini.phase="attack";
+      const needed=mini.advancesNeeded?.[mini.attacker]||3;
+      mini.phase=Number(mini.progress||0)>=Math.max(0,needed-1)?"shot_attack":"attack";
+      if(mini.phase==="shot_attack"){
+        state.message=`🥅 ${teamLabel(mini.attacker)} llegó al arco. Debe elegir dónde patear.`;
+      }
       return true;
     }
 
@@ -3544,7 +3702,7 @@ async function advanceMiniAfterResolution(expectedId){
     mini.defensePick=null;
     mini.trail=[];
     mini.resolution=null;
-    mini.phase="attack";
+    mini.phase=(mini.advancesNeeded?.[next]||3)<=1?"shot_attack":"attack";
     return true;
   });
 }
