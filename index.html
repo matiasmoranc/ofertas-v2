@@ -1134,12 +1134,12 @@ header p{
   position:absolute;
   left:2%;
   right:2%;
-  top:6px;
-  height:286px;
-  border-radius:16px 16px 8px 8px;
+  top:22px;
+  height:236px;
+  border-radius:12px 12px 4px 4px;
   overflow:hidden;
   background:#15572f;
-  box-shadow:0 12px 26px rgba(0,0,0,.42),0 0 0 3px rgba(255,255,255,.15);
+  box-shadow:0 11px 24px rgba(0,0,0,.38),0 0 0 2px rgba(255,255,255,.12);
 }
 .mini-goal-illustration{
   display:block;
@@ -1149,23 +1149,26 @@ header p{
 .mini-goalkeeper{
   position:absolute;
   left:50%;
-  bottom:7px;
-  width:124px;
-  height:178px;
+  bottom:4px;
+  width:150px;
+  height:180px;
   transform:translateX(-50%);
   z-index:6;
   transition:left .58s cubic-bezier(.2,.8,.2,1),transform .58s cubic-bezier(.2,.8,.2,1);
-  filter:drop-shadow(0 9px 5px rgba(0,0,0,.35));
+  filter:drop-shadow(0 8px 5px rgba(0,0,0,.42));
+  transform-origin:50% 78%;
 }
-.mini-goalkeeper-svg{
+.mini-goalkeeper-art{
   display:block;
   width:100%;
   height:100%;
-  overflow:visible;
+  object-fit:contain;
+  pointer-events:none;
+  user-select:none;
 }
-.mini-goalkeeper.dive-left{transform:translateX(-50%) translateX(-35px) rotate(-22deg) scale(1.03);}
-.mini-goalkeeper.dive-right{transform:translateX(-50%) translateX(35px) rotate(22deg) scale(1.03);}
-.mini-goalkeeper.dive-center{transform:translateX(-50%) scale(1.09);}
+.mini-goalkeeper.dive-left{transform:translateX(-50%) rotate(-18deg) scale(1.04);}
+.mini-goalkeeper.dive-right{transform:translateX(-50%) rotate(18deg) scale(1.04);}
+.mini-goalkeeper.dive-center{transform:translateX(-50%) translateY(-8px) scale(1.08);}
 .mini-penalty-spot{
   position:absolute;
   left:50%;
@@ -2373,47 +2376,29 @@ header p{
       <div class="mini-goal">🥅</div>
       <div id="miniGoalScene" class="mini-goal-scene hidden" aria-hidden="true">
         <div class="mini-big-goal" aria-label="Arco de fútbol">
-          <svg class="mini-goal-illustration" viewBox="0 0 600 340" preserveAspectRatio="none" aria-hidden="true">
+          <svg class="mini-goal-illustration" viewBox="0 0 600 260" preserveAspectRatio="none" aria-hidden="true">
             <defs>
               <linearGradient id="goalGrass" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stop-color="#2f8a53"/>
+                <stop offset="0" stop-color="#328e55"/>
                 <stop offset="1" stop-color="#15572f"/>
               </linearGradient>
               <linearGradient id="goalFrame" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0" stop-color="#ffffff"/>
-                <stop offset=".55" stop-color="#dce9e6"/>
-                <stop offset="1" stop-color="#9fb9b4"/>
+                <stop offset=".58" stop-color="#e6efed"/>
+                <stop offset="1" stop-color="#a8bbb7"/>
               </linearGradient>
             </defs>
-            <rect width="600" height="340" fill="url(#goalGrass)"/>
-            <g class="goal-net-lines" opacity=".34" stroke="#eaf7f1" stroke-width="3">
-              <path d="M18 34H582M18 76H582M18 118H582M18 160H582M18 202H582M18 244H582M18 286H582"/>
-              <path d="M42 0V340M90 0V340M138 0V340M186 0V340M234 0V340M282 0V340M330 0V340M378 0V340M426 0V340M474 0V340M522 0V340M570 0V340"/>
+            <rect width="600" height="260" fill="url(#goalGrass)"/>
+            <g class="goal-net-lines" opacity=".3" stroke="#edf8f3" stroke-width="2">
+              <path d="M24 48H576M24 82H576M24 116H576M24 150H576M24 184H576M24 218H576"/>
+              <path d="M56 48V238M106 48V238M156 48V238M206 48V238M256 48V238M306 48V238M356 48V238M406 48V238M456 48V238M506 48V238M556 48V238"/>
             </g>
-            <path d="M24 316V22H576V316" fill="none" stroke="#0a2517" stroke-width="22" opacity=".48"/>
-            <path d="M24 316V22H576V316" fill="none" stroke="url(#goalFrame)" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M24 316H576" stroke="#f5fffb" stroke-width="14" stroke-linecap="round"/>
+            <path d="M24 238V48H576V238" fill="none" stroke="#0a2517" stroke-width="17" opacity=".38"/>
+            <path d="M24 238V48H576V238" fill="none" stroke="url(#goalFrame)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M10 239H590" stroke="#f3f7f4" stroke-width="3" opacity=".86"/>
           </svg>
           <div id="miniGoalkeeper" class="mini-goalkeeper" role="img" aria-label="Golero">
-            <svg class="mini-goalkeeper-svg" viewBox="0 0 120 180" aria-hidden="true">
-              <defs>
-                <linearGradient id="keeperJersey" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0" stop-color="#ffe66c"/>
-                  <stop offset="1" stop-color="#b7d52b"/>
-                </linearGradient>
-              </defs>
-              <circle cx="60" cy="20" r="17" fill="#d99d70" stroke="#682f2b" stroke-width="3"/>
-              <path d="M43 15Q60 -3 77 15" fill="#263238" stroke="#111c1e" stroke-width="3"/>
-              <path d="M38 48Q60 34 82 48L87 106Q60 119 33 106Z" fill="url(#keeperJersey)" stroke="#526d27" stroke-width="4"/>
-              <path d="M40 53L8 82" fill="none" stroke="#ffd35b" stroke-width="15" stroke-linecap="round"/>
-              <path d="M80 53L112 82" fill="none" stroke="#ffd35b" stroke-width="15" stroke-linecap="round"/>
-              <circle cx="7" cy="83" r="11" fill="#47d98b" stroke="#0d714b" stroke-width="4"/>
-              <circle cx="113" cy="83" r="11" fill="#47d98b" stroke="#0d714b" stroke-width="4"/>
-              <path d="M39 106L29 158M81 106L91 158" fill="none" stroke="#eaf6ff" stroke-width="16" stroke-linecap="round"/>
-              <path d="M29 157L17 171M91 157L103 171" fill="none" stroke="#1a2d3a" stroke-width="10" stroke-linecap="round"/>
-              <path d="M43 111H77L82 136H38Z" fill="#304d8f" stroke="#1c2c5a" stroke-width="3"/>
-              <path d="M56 50H64V101H56Z" fill="#ffffff" opacity=".82"/>
-            </svg>
+            <img class="mini-goalkeeper-art" src="./goalkeeper-realistic.webp" alt="">
           </div>
         </div>
         <div class="mini-penalty-spot"></div>
