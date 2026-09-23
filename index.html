@@ -6262,6 +6262,12 @@ function changeBid(delta){
   selectedBid=clamp(selectedBid+delta,min,maximum);
   $("bidValue").textContent=selectedBid;
   $("offerButton").textContent=`OFERTAR €${selectedBid}`;
+
+  /* Actualizamos los controles en el momento: tocar + no debe dejar
+     bloqueado el botón − mientras la oferta todavía no fue confirmada. */
+  $("bidMinus").disabled=selectedBid<=min;
+  $("bidPlus").disabled=!protectedLimit && selectedBid>=maximum;
+  $("offerButton").disabled=selectedBid<min || selectedBid>maximum;
 }
 
 function openRules(){
