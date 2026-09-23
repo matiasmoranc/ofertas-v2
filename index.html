@@ -3737,12 +3737,12 @@ function renderMiniMatch(){
 
   const attacker=mini.attacker;
   const defender=otherPlayer(attacker);
+  const resolution=mini.resolution||{};
+  const shotMode=["shot_attack","shot_defense"].includes(mini.phase) ||
+    (mini.phase==="resolved" && resolution.shot===true);
 
-  /* El color visual representa al jugador que debe actuar AHORA:
-     - fase attack  -> atacante
-     - fase defense -> defensor
-     - fase resolved -> atacante, mientras se muestra la resolución */
-  const activeMiniTeam = mini.phase==="defense" ? defender : attacker;
+  /* El color visual representa al jugador que debe actuar ahora. */
+  const activeMiniTeam=["defense","shot_defense"].includes(mini.phase)?defender:attacker;
   box.classList.remove("mini-turn-a","mini-turn-b");
   box.classList.add(activeMiniTeam==="A"?"mini-turn-a":"mini-turn-b");
   const needed=mini.advancesNeeded?.[attacker]||3;
@@ -3758,7 +3758,9 @@ function renderMiniMatch(){
     const teamAttackNo=mini.attackNo?.[team]||1;
     const usedAttacks=Math.max(0,Math.min(teamLimit,teamAttackNo-1));
     const teamNeeded=mini.advancesNeeded?.[team]||3;
-    const teamProgress=mini.attacker===team ? Math.min(teamNeeded,mini.progress||0) : 0;
+    const teamProgress=mini.attacker===team
+      ?Math.min(teamNeeded,(mini.progress||0)+(shotMode?1:0))
+      :0;
     const attackDots=Array.from({length:teamLimit},(_,i)=>
       `<span class="mini-attack-dot ${i<usedAttacks?"used":""}"></span>`
     ).join("");
@@ -3781,7 +3783,9 @@ function renderMiniMatch(){
   $("miniInfoB").innerHTML=miniTeamPanelHTML("B");
   $("miniInfoA").classList.toggle("my-mini-team",myTeam==="A");
   $("miniInfoB").classList.toggle("my-mini-team",myTeam==="B");
-  $("miniMatchSub").textContent=`Ataque ${attackNo}/${limit} · ${mini.progress||0}/${needed} avances`;
+  $("miniMatchSub").textContent=shotMode
+    ?`Ataque ${attackNo}/${limit} · DEFINICIÓN`
+    :`Ataque ${attackNo}/${limit} · ${mini.progress||0}/${needed} avances`;
 
   const buttons=[...rootMiniButtons()];
   buttons.forEach(btn=>{
@@ -3791,16 +3795,24 @@ function renderMiniMatch(){
   const ball=$("miniBall");
   const mark=$("miniDefenderMark");
   const pitch=$("miniPitch");
-  const goal=$("miniPitch")?.querySelector(".mini-goal");
+  const goal=pitch?.querySelector(".mini-goal");
+  const goalScene=$("miniGoalScene");
+  const goalkeeper=$("miniGoalkeeper");
   const fx=$("miniFxBurst");
   mark.classList.add("hidden");
+  pitch?.classList.toggle("shootout-mode",shotMode);
+  goalScene?.classList.toggle("hidden",!shotMode);
+  if(goalkeeper){
+    goalkeeper.style.left="50%";
+    goalkeeper.classList.remove("dive-left","dive-center","dive-right");
+  }
 
   if(mini.phase!=="resolved"){
-    pitch?.classList.remove("event-goal","event-recovery");
+    pitch?.classList.remove("event-goal","event-recovery","event-save");
     goal?.classList.remove("goal-hit");
     ball.classList.remove("recovery-rebound");
     mark.classList.remove("recovery-hit");
-    fx?.classList.remove("show","goal","recovery","team-a","team-b");
+    fx?.classList.remove("show","goal","recovery","save","team-a","team-b");
   }
 
   let displayLane=mini.currentLane||"center";
@@ -3851,32 +3863,95 @@ function renderMiniMatch(){
       $("miniTurnTitle").textContent=`👁 ${teamName(defender)} está defendiendo`;
       $("miniTurnText").textContent="Esperando la elección del defensor...";
     }
+  }else if(mini.phase==="shot_attack"){
+    displayLane="center";
+    displayProgress=needed;
+    if(isAttacker){
+      $("miniTurnTitle").textContent=`${attacker==="A"?"🔵":"🔴"} TU TURNO — PATEÁS AL ARCO`;
+      $("miniTurnText").textContent="Elegí IZQUIERDA, CENTRO o DERECHA para rematar.";
+      buttons.forEach(btn=>btn.disabled=false);
+      showMiniActionGuide(
+        "🥅 MANO A MANO",
+        "Elegí dónde patear: izquierda, centro o derecha.",
+        `shot-attack|${attacker}|${attackNo}`
+      );
+    }else{
+      $("miniTurnTitle").textContent=isSpectator
+        ?`👁 ${teamName(attacker)} prepara el remate`
+        :`⏳ ${teamName(attacker)} está eligiendo dónde patear`;
+      $("miniTurnText").textContent="Esperando la elección del rematador...";
+      showBall=false;
+    }
+  }else if(mini.phase==="shot_defense"){
+    displayProgress=needed;
+    if(isAttacker){
+      displayLane=mini.attackPick||"center";
+      $("miniTurnTitle").textContent="✅ REMATE ELEGIDO — ESPERANDO AL GOLERO";
+      $("miniTurnText").textContent="Tu rival todavía no sabe dónde pateaste.";
+      const selected=buttons.find(b=>b.dataset.miniLane===mini.attackPick);
+      if(selected) selected.classList.add(attacker==="A"?"touch-a":"touch-b");
+    }else if(isDefender){
+      showBall=false;
+      $("miniTurnTitle").textContent=`${defender==="A"?"🔵":"🔴"} TU TURNO — ATAJÁS`;
+      $("miniTurnText").textContent="Elegí IZQUIERDA, CENTRO o DERECHA para lanzar al golero.";
+      buttons.forEach(btn=>btn.disabled=false);
+      showMiniActionGuide(
+        "🧤 ATAJÁ EL REMATE",
+        "Elegí dónde se va a tirar el golero.",
+        `shot-defense|${attacker}|${attackNo}|${mini.attackPick||""}`
+      );
+    }else if(isSpectator){
+      showBall=false;
+      $("miniTurnTitle").textContent=`👁 ${teamName(defender)} prepara la atajada`;
+      $("miniTurnText").textContent="Esperando la elección del golero...";
+    }
   }else if(mini.phase==="resolved"){
-    const res=mini.resolution||{};
+    const res=resolution;
+    const isShot=Boolean(res.shot);
     displayLane=res.attackLane||mini.currentLane||"center";
-    displayProgress=res.type==="recovery"?(mini.progress||0)+1:(mini.progress||0);
-    $("miniTurnTitle").textContent=res.type==="goal"?"⚽ GOL":res.type==="recovery"?"🛡️ RECUPERACIÓN":"🏃 AVANZA";
+    displayProgress=isShot?needed:res.type==="recovery"?(mini.progress||0)+1:(mini.progress||0);
+    $("miniTurnTitle").textContent=res.type==="goal"
+      ?"⚽ GOL"
+      :res.type==="save"
+        ?"🧤 ATAJADA"
+        :res.type==="recovery"
+          ?"🛡️ RECUPERACIÓN"
+          :"🏃 AVANZA";
     $("miniTurnText").textContent="La jugada continúa automáticamente.";
     const attackBtn=buttons.find(b=>b.dataset.miniLane===res.attackLane);
     const defenseBtn=buttons.find(b=>b.dataset.miniLane===res.defenseLane);
     if(attackBtn) attackBtn.classList.add(attacker==="A"?"touch-a":"touch-b");
     if(defenseBtn) defenseBtn.classList.add(defender==="A"?"touch-a":"touch-b");
-    mark.style.left=miniLaneX(res.defenseLane)+'%';
-    mark.style.bottom=(100-miniProgressY(displayProgress,needed))+'%';
-    mark.classList.remove("hidden");
+
+    if(isShot && goalkeeper){
+      goalkeeper.style.left=miniLaneX(res.defenseLane)+'%';
+      goalkeeper.classList.add(`dive-${res.defenseLane||"center"}`);
+    }else{
+      mark.style.left=miniLaneX(res.defenseLane)+'%';
+      mark.style.bottom=(100-miniProgressY(displayProgress,needed))+'%';
+      mark.classList.remove("hidden");
+    }
 
     if(lastMiniFlashId!==res.id){
       lastMiniFlashId=res.id;
       const flash=$("miniEventFlash");
-      const eventTeam=res.type==="recovery"?defender:attacker;
+      const eventTeam=["recovery","save"].includes(res.type)?defender:attacker;
       const teamClass=eventTeam==="A"?"team-a":"team-b";
-      const eventClass=res.type==="goal"?"event-goal":res.type==="recovery"?"event-recovery":"event-advance";
+      const eventClass=res.type==="goal"
+        ?"event-goal"
+        :res.type==="save"
+          ?"event-save"
+          :res.type==="recovery"
+            ?"event-recovery"
+            :"event-advance";
 
       flash.textContent=res.type==="goal"
         ?`⚽ ¡GOL DEL ${teamName(attacker)}!`
-        :res.type==="recovery"
-          ?`🛡️ ¡RECUPERA EL ${teamName(defender)}!`
-          :"🏃 ¡AVANZA!";
+        :res.type==="save"
+          ?`🧤 ¡ATAJÓ EL ${teamName(defender)}!`
+          :res.type==="recovery"
+            ?`🛡️ ¡RECUPERA EL ${teamName(defender)}!`
+            :"🏃 ¡AVANZA!";
       flash.className=`mini-event-flash ${eventClass} ${teamClass}`;
       void flash.offsetWidth;
       flash.classList.add("show");
@@ -3890,6 +3965,9 @@ function renderMiniMatch(){
           void score.offsetWidth;
           score.classList.add("score-pop");
         }
+      }else if(res.type==="save"){
+        pitch?.classList.add("event-save");
+        ball.classList.add("recovery-rebound");
       }else if(res.type==="recovery"){
         pitch?.classList.add("event-recovery");
         ball.classList.add("recovery-rebound");
@@ -3898,20 +3976,20 @@ function renderMiniMatch(){
 
       if(fx && res.type!=="advance"){
         fx.style.left=miniLaneX(res.attackLane)+'%';
-        fx.style.bottom=(100-miniProgressY(displayProgress,needed))+'%';
-        fx.className=`mini-fx-burst ${res.type} ${teamClass}`;
+        fx.style.bottom=isShot?"64%":(100-miniProgressY(displayProgress,needed))+'%';
+        fx.className=`mini-fx-burst ${res.type==="goal"?"goal":"recovery"} ${teamClass}`;
         void fx.offsetWidth;
         fx.classList.add("show");
       }
 
       if(navigator.vibrate){
-        navigator.vibrate(res.type==="goal"?[90,45,140]:res.type==="recovery"?[70,35,70]:35);
+        navigator.vibrate(res.type==="goal"?[90,45,140]:["recovery","save"].includes(res.type)?[70,35,70]:35);
       }
     }
 
     if(!isSpectator){
       if(miniResolutionTimer) clearTimeout(miniResolutionTimer);
-      const resolutionDelay=res.type==="goal"?1800:res.type==="recovery"?1400:1100;
+      const resolutionDelay=res.type==="goal"?1800:["recovery","save"].includes(res.type)?1400:1100;
       miniResolutionTimer=setTimeout(()=>{
         miniResolutionTimer=null;
         advanceMiniAfterResolution(res.id);
@@ -3919,10 +3997,20 @@ function renderMiniMatch(){
     }
   }
 
-  ball.style.left=miniLaneX(displayLane)+'%';
-  ball.style.bottom=(100-miniProgressY(displayProgress,needed))+'%';
+  if(shotMode){
+    ball.style.left=miniLaneX(displayLane)+'%';
+    ball.style.bottom=mini.phase==="resolved"?"62%":"11%";
+  }else{
+    ball.style.left=miniLaneX(displayLane)+'%';
+    ball.style.bottom=(100-miniProgressY(displayProgress,needed))+'%';
+  }
   ball.classList.toggle("invisible",!showBall);
-  renderMiniTrail(mini,preview);
+  if(shotMode){
+    const svg=$("miniTrailSvg");
+    if(svg) svg.innerHTML="";
+  }else{
+    renderMiniTrail(mini,preview);
+  }
   renderMiniBriefing();
 }
 
