@@ -48,6 +48,25 @@ async function requireAdmin(uid){
     throw new HttpsError("permission-denied","Solo pinar93 puede usar el panel de administración.");
   }
 }
+async function removeRecordedResultFromUser(targetUid,matchId){
+  if(!targetUid) return;
+  await db.ref(`users/${targetUid}`).transaction(user=>{
+    if(!user) return user;
+    const entry=user.history?.[matchId]||null;
+    const applied=user.appliedMatches?.[matchId]===true && Boolean(entry);
+    if(user.history) delete user.history[matchId];
+    if(user.appliedMatches) delete user.appliedMatches[matchId];
+    if(applied){
+      user.stats={played:0,won:0,drawn:0,lost:0,goalsFor:0,goalsAgainst:0,tournamentsWon:0,...(user.stats||{})};
+      user.stats.played=Math.max(0,Number(user.stats.played||0)-1);
+      user.stats.goalsFor=Math.max(0,Number(user.stats.goalsFor||0)-Number(entry.myGoals||0));
+      user.stats.goalsAgainst=Math.max(0,Number(user.stats.goalsAgainst||0)-Number(entry.opponentGoals||0));
+      const key=entry.outcome==="win"?"won":entry.outcome==="loss"?"lost":"drawn";
+      user.stats[key]=Math.max(0,Number(user.stats[key]||0)-1);
+    }
+    return user;
+  });
+}
 function baseTournamentGame(code,a,b,tournamentId,matchId){
   return {
     version:2,roomCode:code,status:"playing",
@@ -285,8 +304,8 @@ exports.openTournamentMatch=onCall(async request=>{
     const action=request.data.action;
 
     if(action==="adminSnapshot"){
-      const [usersSnap,tournamentsSnap]=await Promise.all([
-        db.ref("users").get(),db.ref("tournaments").get()
+      const [usersSnap,tournamentsSnap,matchesSnap]=await Promise.all([
+        db.ref("users").get(),db.ref("tournaments").get(),db.ref("matches").get()
       ]);
       const users=Object.entries(usersSnap.val()||{}).map(([userUid,user])=>({
         uid:userUid,
@@ -314,7 +333,17 @@ exports.openTournamentMatch=onCall(async request=>{
           roomCode:match?.roomCode||null
         }))
       })).sort((a,b)=>a.name.localeCompare(b.name));
-      return {users,tournaments};
+      const matches=Object.entries(matchesSnap.val()||{}).map(([matchId,match])=>({
+        matchId,
+        playerAUid:cleanText(match?.playerAUid||"",128),
+        playerBUid:cleanText(match?.playerBUid||"",128),
+        playerAName:cleanText(match?.playerAName||"Equipo Azul",40),
+        playerBName:cleanText(match?.playerBName||"Equipo Rojo",40),
+        goalsA:Number(match?.goalsA||0),goalsB:Number(match?.goalsB||0),
+        finishedAt:Number(match?.finishedAt||0),
+        tournamentId:cleanText(match?.tournamentId||"",80)
+      })).sort((a,b)=>b.finishedAt-a.finishedAt);
+      return {users,tournaments,matches};
     }
 
     if(action==="adminSetCups"){
@@ -408,6 +437,20 @@ exports.openTournamentMatch=onCall(async request=>{
         if(code){cleanup[`games/${code}`]=null;cleanup[`matches/${code}`]=null;}
       }
       await db.ref().update(cleanup);
+      return {ok:true};
+    }
+
+    if(action==="adminDeleteRecordedMatch"){
+      const matchId=cleanText(request.data?.matchId,120);
+      if(!matchId) throw new HttpsError("invalid-argument","Falta el partido.");
+      const matchRef=db.ref(`matches/${matchId}`);
+      const match=(await matchRef.get()).val();
+      if(!match) throw new HttpsError("not-found","El partido ya no existe.");
+      await Promise.all([
+        removeRecordedResultFromUser(match.playerAUid,matchId),
+        removeRecordedResultFromUser(match.playerBUid,matchId)
+      ]);
+      await db.ref().update({[`matches/${matchId}`]:null,[`deletedMatches/${matchId}`]:true});
       return {ok:true};
     }
 
@@ -1088,6 +1131,9 @@ async function processOfficialGame(room,game,result){
   }
 
   const matchKey=cleanText(game.matchInstanceId,120)||room;
+  if((await db.ref(`deletedMatches/${matchKey}`).get()).val()===true){
+    return {processed:false,reason:"deleted-by-admin"};
+  }
   const matchRef=db.ref(`matches/${matchKey}`);
   const created=await matchRef.transaction(current=>current||{
     roomCode:room,matchInstanceId:matchKey,playerAUid:game.playerAUid,playerBUid:game.playerBUid,
