@@ -566,12 +566,15 @@ async function adminRequest(action,data={}){
 function renderAdminPanel(data){
   adminSnapshotData=data;
   const node=el("adminPanelContent"); if(!node) return;
-  const users=data?.users||[], tournaments=data?.tournaments||[];
+  const users=data?.users||[], tournaments=data?.tournaments||[], matches=data?.matches||[];
   const usersActive=adminActiveView==="users";
+  const cupsActive=adminActiveView==="cups";
+  const matchesActive=adminActiveView==="matches";
   node.innerHTML=`
     <div class="admin-main-tabs">
       <button class="small-action ${usersActive?"green":""}" data-admin-view="users">USUARIOS</button>
-      <button class="small-action ${!usersActive?"green":""}" data-admin-view="cups">COPAS</button>
+      <button class="small-action ${matchesActive?"green":""}" data-admin-view="matches">PARTIDOS</button>
+      <button class="small-action ${cupsActive?"green":""}" data-admin-view="cups">COPAS</button>
       <button class="small-action admin-refresh" data-admin-refresh aria-label="Actualizar" title="Actualizar">↻</button>
     </div>
     <div id="adminMessage" class="auth-message"></div>
@@ -591,7 +594,16 @@ function renderAdminPanel(data){
           </div>
         </details>`).join("")||'<div class="empty-state">No hay usuarios.</div>'}</div>
     </section>
-    <section data-admin-section="cups" class="${!usersActive?"":"screen-hidden"}">
+    <section data-admin-section="matches" class="${matchesActive?"":"screen-hidden"}">
+      <div class="admin-match-list">${matches.map(match=>{
+        const date=match.finishedAt?new Date(match.finishedAt).toLocaleString("es-UY"):"Sin fecha";
+        return `<div class="admin-match-row">
+          <span><strong>${esc(match.playerAName)} ${match.goalsA}–${match.goalsB} ${esc(match.playerBName)}</strong><small>${esc(date)}${match.tournamentId?" · Copa":""}</small></span>
+          <button class="small-action danger" data-admin-delete-recorded-match="${esc(match.matchId)}" data-label="${esc(match.playerAName)} ${match.goalsA}–${match.goalsB} ${esc(match.playerBName)}">ELIMINAR</button>
+        </div>`;
+      }).join("")||'<div class="empty-state">No hay partidos registrados.</div>'}</div>
+    </section>
+    <section data-admin-section="cups" class="${cupsActive?"":"screen-hidden"}">
       <div class="admin-tournament-list">${tournaments.map(tournament=>`
         <details class="admin-card admin-collapsible">
           <summary class="admin-card-head"><strong>${esc(tournament.name)}</strong><span>${esc(tournament.status)} · ${tournament.participants.length}/4 <i aria-hidden="true"></i></span></summary>
@@ -627,6 +639,7 @@ async function handleAdminClick(event){
   const deleteUser=event.target.closest("[data-admin-delete-user]");
   const deleteTournament=event.target.closest("[data-admin-delete-tournament]");
   const resetMatch=event.target.closest("[data-admin-reset-match]");
+  const deleteRecordedMatch=event.target.closest("[data-admin-delete-recorded-match]");
   const removeParticipant=event.target.closest("[data-admin-remove-participant]");
   if(view){
     adminActiveView=view.dataset.adminView;
@@ -634,7 +647,7 @@ async function handleAdminClick(event){
     document.querySelectorAll("[data-admin-view]").forEach(button=>button.classList.toggle("green",button.dataset.adminView===adminActiveView));
     return;
   }
-  if(!refresh&&!cups&&!resetStats&&!deleteUser&&!deleteTournament&&!resetMatch&&!removeParticipant) return;
+  if(!refresh&&!cups&&!resetStats&&!deleteUser&&!deleteTournament&&!resetMatch&&!deleteRecordedMatch&&!removeParticipant) return;
   const message=el("adminMessage");
   try{
     if(refresh) return loadAdminPanel();
@@ -677,6 +690,10 @@ async function handleAdminClick(event){
     if(deleteTournament){
       if(!await window.gameConfirm("¿Eliminar copa?",`Se eliminará definitivamente la copa “${deleteTournament.dataset.name}”.`,"Eliminar")) return;
       await adminRequest("adminDeleteTournament",{tournamentId:deleteTournament.dataset.adminDeleteTournament});
+    }
+    if(deleteRecordedMatch){
+      if(!await window.gameConfirm("¿Eliminar partido?",`Se borrará “${deleteRecordedMatch.dataset.label}” del historial de ambos jugadores y se corregirán sus estadísticas. Esta acción no se puede deshacer.`,"Eliminar")) return;
+      await adminRequest("adminDeleteRecordedMatch",{matchId:deleteRecordedMatch.dataset.adminDeleteRecordedMatch});
     }
     if(resetMatch){
       if(!await window.gameConfirm("¿Reiniciar partido?","Volverá a quedar pendiente y se eliminará la sala actual.","Reiniciar")) return;
