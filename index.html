@@ -2780,6 +2780,8 @@ let selectedBid = 1;
 let openedMiniTeam = null;
 let lastAuctionKey = "";
 let lastProtectedPassNoticeKey = "";
+let lastRematchInviteKey = "";
+let rematchInviteInFlight = false;
 let unsubscribeOpenRooms = null;
 let currentRoomIsOpen = false;
 let currentOpenRoomName = "";
@@ -4083,17 +4085,7 @@ async function playMatch(){
   await ensureMiniMatch();
 }
 
-async function resetGame(){
-  if(myTeam!=="A" || !gameState || !roomCode) return;
-  const rematchCode=roomCode;
-  const shouldRepublish=Boolean(currentRoomIsOpen || gameState.isOpenRoom);
-  const rematchName=sanitizeTableName(
-    gameState.openRoomName ||
-    currentOpenRoomName ||
-    $("tableNameInput")?.value ||
-    `Mesa de ${gameState.playerAName||"Equipo Azul"}`
-  );
-
+function clearRematchClientTimers(){
   if(teamIntroTimer){
     clearTimeout(teamIntroTimer);
     teamIntroTimer=null;
@@ -4109,29 +4101,106 @@ async function resetGame(){
   lastMiniFlashId=null;
   lastMiniGuideKey="";
   miniBriefingSeenKey="";
-  await mutateGame((state,team)=>{
-    if(team!=="A"){state.message="Solo el Equipo A puede reiniciar la partida.";return true;}
-    const seed=nextSeed(state.rngSeed||Date.now());
-    const playerAName=state.playerAName;
-    const playerBName=state.playerBName;
-    const reset=freshGameState(state.roomCode,state.playerAUid,state.playerBUid,seed);
-    reset.playerAName=playerAName||"Equipo Azul";
-    reset.playerBName=playerBName||"Equipo Rojo";
+}
+
+async function requestRematch(){
+  if(!myTeam || !gameState?.result || !roomCode || isSpectator) return;
+  const requestedRoom=roomCode;
+  const requestedState=gameState;
+  await ensureResultSynced(requestedRoom,requestedState);
+
+  const requestId=`${requestedState.matchInstanceId||requestedRoom}:${uid}:${Date.now()}`;
+  const transaction=await runTransaction(ref(db,`games/${requestedRoom}`),current=>{
+    if(!current?.result) return;
+    const team=current.playerAUid===uid?"A":current.playerBUid===uid?"B":null;
+    if(!team) return;
+    if(current.rematchRequest?.status==="pending") return;
+    const next=JSON.parse(JSON.stringify(current));
+    next.rematchRequest={
+      id:requestId,
+      status:"pending",
+      fromUid:uid,
+      fromTeam:team,
+      fromName:team==="A"
+        ?(next.playerAName||"Equipo Azul")
+        :(next.playerBName||"Equipo Rojo"),
+      requestedAt:serverNow()
+    };
+    next.message=`🔄 ${next.rematchRequest.fromName} pidió jugar la revancha.`;
+    return next;
+  },{applyLocally:false});
+
+  if(!transaction.committed){
+    throw new Error("No se pudo enviar la solicitud de revancha.");
+  }
+}
+
+async function respondToRematch(request,accept){
+  const responseRoom=roomCode;
+  const responseState=gameState;
+  if(!responseRoom || !responseState?.result || !request?.id || isSpectator) return;
+
+  await ensureResultSynced(responseRoom,responseState);
+
+  if(!accept){
+    await runTransaction(ref(db,`games/${responseRoom}`),current=>{
+      if(
+        !current?.result ||
+        current.rematchRequest?.id!==request.id ||
+        current.rematchRequest?.status!=="pending" ||
+        current.rematchRequest?.fromUid===uid
+      ) return;
+      const next=JSON.parse(JSON.stringify(current));
+      next.rematchRequest.status="declined";
+      next.rematchRequest.respondedByUid=uid;
+      next.rematchRequest.respondedAt=serverNow();
+      next.message="La revancha no fue aceptada. El resultado original se mantiene.";
+      return next;
+    },{applyLocally:false});
+    return;
+  }
+
+  const shouldRepublish=Boolean(currentRoomIsOpen || responseState.isOpenRoom);
+  const rematchName=sanitizeTableName(
+    responseState.openRoomName ||
+    currentOpenRoomName ||
+    $("tableNameInput")?.value ||
+    `Mesa de ${responseState.playerAName||"Equipo Azul"}`
+  );
+
+  clearRematchClientTimers();
+  const transaction=await runTransaction(ref(db,`games/${responseRoom}`),current=>{
+    if(
+      !current?.result ||
+      current.rematchRequest?.id!==request.id ||
+      current.rematchRequest?.status!=="pending" ||
+      current.rematchRequest?.fromUid===uid
+    ) return;
+    const team=current.playerAUid===uid?"A":current.playerBUid===uid?"B":null;
+    if(!team) return;
+
+    const seed=nextSeed(current.rngSeed||Date.now());
+    const reset=freshGameState(current.roomCode,current.playerAUid,current.playerBUid,seed);
+    reset.playerAName=current.playerAName||"Equipo Azul";
+    reset.playerBName=current.playerBName||"Equipo Rojo";
     if(shouldRepublish){
       reset.isOpenRoom=true;
       reset.openRoomName=rematchName;
     }
-    Object.keys(state).forEach(k=>delete state[k]);
-    Object.assign(state,reset);
-    if(state.playerBUid) prepareNextAuctionInState(state,"🔄 Nueva partida.");
-    return true;
-  });
+    if(reset.playerBUid) prepareNextAuctionInState(reset,"🔄 Revancha aceptada. Nueva partida.");
+    return reset;
+  },{applyLocally:false});
+
+  if(!transaction.committed){
+    throw new Error("La solicitud de revancha ya no está disponible.");
+  }
 
   if(shouldRepublish && rematchName){
-    await set(ref(db,`openRooms/${rematchCode}`),{
+    const nextState=transaction.snapshot.val();
+    await set(ref(db,`openRooms/${responseRoom}`),{
       name:rematchName,
-      roomCode:rematchCode,
-      ownerUid:gameState?.playerAUid || uid,
+      roomCode:responseRoom,
+      ownerUid:nextState.playerAUid,
       createdAt:serverTimestamp(),
       startedAt:serverTimestamp(),
       lastActivity:serverTimestamp(),
@@ -4140,6 +4209,51 @@ async function resetGame(){
     currentRoomIsOpen=true;
     currentOpenRoomName=rematchName;
   }
+}
+
+function syncRematchInvitation(state,code){
+  const request=state?.rematchRequest;
+  if(
+    isSpectator ||
+    !myTeam ||
+    state?.tournamentId ||
+    !state?.result ||
+    !request?.id ||
+    request.status!=="pending" ||
+    request.fromUid===uid
+  ) return;
+
+  const inviteKey=`${code}:${request.id}`;
+  if(inviteKey===lastRematchInviteKey || rematchInviteInFlight) return;
+
+  if(activeDialogResolve){
+    setTimeout(()=>{
+      if(roomCode===code && gameState) syncRematchInvitation(gameState,code);
+    },400);
+    return;
+  }
+
+  lastRematchInviteKey=inviteKey;
+  rematchInviteInFlight=true;
+  setTimeout(async()=>{
+    try{
+      const accepted=await showGameDialog({
+        title:"Solicitud de revancha",
+        message:`${request.fromName||"Tu rival"} quiere jugar una revancha. ¿Querés aceptar? Si elegís “Ahora no”, el resultado queda como está y nadie pierde otro partido.`,
+        confirmText:"JUGAR REVANCHA",
+        cancelText:"AHORA NO"
+      });
+      if(roomCode!==code) return;
+      await respondToRematch(request,accepted);
+    }catch(error){
+      console.error("No se pudo responder la revancha:",error);
+      if(roomCode===code){
+        await window.gameAlert("No se pudo responder",error?.message||"Intentá nuevamente.");
+      }
+    }finally{
+      rematchInviteInFlight=false;
+    }
+  },50);
 }
 
 function renderTeam(team){
@@ -5037,22 +5151,30 @@ function updateScreen(){
     gameState?.result?.winner!=="DRAW"
   );
   if(revengeButton){
-    revengeButton.classList.toggle("hidden",tournamentFinished || (isSpectator&&Boolean(gameState?.tournamentId)));
+    revengeButton.classList.toggle("hidden",tournamentFinished || isSpectator);
     if(tournamentDraw){
       revengeButton.classList.remove("waiting-rematch");
       revengeButton.disabled=false;
       revengeButton.textContent="🔄 JUGAR REVANCHA AHORA";
-    }else if(!tournamentFinished){
-      const waitingForBlue=!isSpectator && myTeam!=="A";
-      revengeButton.classList.toggle("waiting-rematch",waitingForBlue);
-      revengeButton.disabled=isSpectator || myTeam!=="A";
-      if(isSpectator){
-        revengeButton.textContent="👁 FIN DEL PARTIDO";
-      }else if(myTeam==="A"){
-        revengeButton.textContent="🔄 REVANCHA";
+    }else if(!tournamentFinished && hasResult){
+      const request=gameState.rematchRequest;
+      const requestedByMe=request?.status==="pending" && request.fromUid===uid;
+      const requestedByOpponent=request?.status==="pending" && request.fromUid!==uid;
+      const declined=request?.status==="declined";
+
+      revengeButton.classList.toggle("waiting-rematch",requestedByMe || requestedByOpponent);
+      revengeButton.disabled=Boolean(requestedByMe || requestedByOpponent || declined);
+      if(requestedByMe){
+        revengeButton.innerHTML="<span>⏳ REVANCHA SOLICITADA</span><small>Esperando la respuesta del rival</small>";
+      }else if(requestedByOpponent){
+        revengeButton.innerHTML="<span>🔔 RESPONDÉ LA SOLICITUD</span><small>Elegí una opción en el mensaje</small>";
+      }else if(declined){
+        revengeButton.innerHTML="<span>REVANCHA NO ACEPTADA</span><small>El resultado original se mantiene</small>";
       }else{
-        revengeButton.innerHTML="<span>⏳ ESPERANDO REVANCHA</span><small>El equipo azul debe iniciarla</small>";
+        revengeButton.textContent="🔄 PEDIR REVANCHA";
       }
+    }else{
+      revengeButton.disabled=true;
     }
   }
   const laterButton=$("tournamentLaterButton");
@@ -6130,6 +6252,7 @@ function listenToRoom(code){
     syncEmojiExperience(state);
     syncOpponentConnection(state);
     syncTurnTimeout(state);
+    syncRematchInvitation(state,code);
 
     /* Las mesas públicas siguen visibles mientras se juega para que otros
        usuarios puedan entrar como espectadores. Al terminar, se quitan del lobby. */
@@ -6267,6 +6390,8 @@ function leaveRoom(clearUrl=true, closeActiveMatch=false){
   emojiEventInitialized=false;
   emojiCooldownUntil=0;
   lastForfeitNoticeKey="";
+  lastRematchInviteKey="";
+  rematchInviteInFlight=false;
 
   if(db && oldRoomCode && closeActiveMatch && wasActivePlayer){
     /* Un resultado terminado debe permanecer hasta que la función del
@@ -6398,7 +6523,10 @@ $("revengeButton").addEventListener("click",()=>{
   if(gameState?.tournamentId&&gameState?.tournamentMatchId){
     chooseTournamentRematch(true);
   }else{
-    resetGame();
+    requestRematch().catch(async error=>{
+      console.error("No se pudo pedir la revancha:",error);
+      await window.gameAlert("No se pudo pedir la revancha",error?.message||"Intentá nuevamente.");
+    });
   }
 });
 $("tournamentLaterButton")?.addEventListener("click",()=>chooseTournamentRematch(false));
