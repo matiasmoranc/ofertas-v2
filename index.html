@@ -4109,12 +4109,39 @@ async function requestRematch(){
   const requestedState=gameState;
   await ensureResultSynced(requestedRoom,requestedState);
 
+  const shouldRepublish=Boolean(currentRoomIsOpen || requestedState.isOpenRoom);
+  const rematchName=sanitizeTableName(
+    requestedState.openRoomName ||
+    currentOpenRoomName ||
+    $("tableNameInput")?.value ||
+    `Mesa de ${requestedState.playerAName||"Equipo Azul"}`
+  );
   const requestId=`${requestedState.matchInstanceId||requestedRoom}:${uid}:${Date.now()}`;
+
   const transaction=await runTransaction(ref(db,`games/${requestedRoom}`),current=>{
     if(!current?.result) return;
     const team=current.playerAUid===uid?"A":current.playerBUid===uid?"B":null;
     if(!team) return;
-    if(current.rematchRequest?.status==="pending") return;
+
+    /* Si el rival pidió revancha casi al mismo tiempo, esta segunda
+       pulsación cuenta como aceptación y comienza la partida de inmediato. */
+    if(current.rematchRequest?.status==="pending"){
+      if(current.rematchRequest.fromUid===uid) return current;
+
+      const seed=nextSeed(current.rngSeed||Date.now());
+      const reset=freshGameState(current.roomCode,current.playerAUid,current.playerBUid,seed);
+      reset.playerAName=current.playerAName||"Equipo Azul";
+      reset.playerBName=current.playerBName||"Equipo Rojo";
+      if(shouldRepublish){
+        reset.isOpenRoom=true;
+        reset.openRoomName=rematchName;
+      }
+      if(reset.playerBUid){
+        prepareNextAuctionInState(reset,"🔄 Ambos pidieron revancha. Nueva partida.");
+      }
+      return reset;
+    }
+
     const next=JSON.parse(JSON.stringify(current));
     next.rematchRequest={
       id:requestId,
@@ -4131,7 +4158,33 @@ async function requestRematch(){
   },{applyLocally:false});
 
   if(!transaction.committed){
+    const latest=await get(ref(db,`games/${requestedRoom}`));
+    if(latest.exists() && !latest.val()?.result) return;
     throw new Error("No se pudo enviar la solicitud de revancha.");
+  }
+
+  const nextState=transaction.snapshot.val();
+  const rematchStarted=Boolean(
+    nextState &&
+    !nextState.result &&
+    nextState.matchInstanceId!==requestedState.matchInstanceId
+  );
+
+  if(rematchStarted){
+    clearRematchClientTimers();
+    if(shouldRepublish && rematchName){
+      await set(ref(db,`openRooms/${requestedRoom}`),{
+        name:rematchName,
+        roomCode:requestedRoom,
+        ownerUid:nextState.playerAUid,
+        createdAt:serverTimestamp(),
+        startedAt:serverTimestamp(),
+        lastActivity:serverTimestamp(),
+        status:"playing"
+      });
+      currentRoomIsOpen=true;
+      currentOpenRoomName=rematchName;
+    }
   }
 }
 
@@ -4213,15 +4266,24 @@ async function respondToRematch(request,accept){
 
 function syncRematchInvitation(state,code){
   const request=state?.rematchRequest;
-  if(
-    isSpectator ||
-    !myTeam ||
-    state?.tournamentId ||
-    !state?.result ||
-    !request?.id ||
-    request.status!=="pending" ||
-    request.fromUid===uid
-  ) return;
+  const isPendingInvite=Boolean(
+    !isSpectator &&
+    myTeam &&
+    !state?.tournamentId &&
+    state?.result &&
+    request?.id &&
+    request.status==="pending" &&
+    request.fromUid!==uid
+  );
+
+  /* Si ambos tocaron revancha y la partida ya comenzó, cerramos el popup
+     anterior para que nunca quede bloqueando la nueva subasta. */
+  if(rematchInviteInFlight && lastRematchInviteKey && !isPendingInvite){
+    lastRematchInviteKey="";
+    if(activeDialogResolve) closeGameDialog(false);
+  }
+
+  if(!isPendingInvite) return;
 
   const inviteKey=`${code}:${request.id}`;
   if(inviteKey===lastRematchInviteKey || rematchInviteInFlight) return;
