@@ -1166,3 +1166,15 @@ exports.recordOfficialResult=onValueCreated("/games/{room}/result",async event=>
   const game=(await event.data.ref.parent.get()).val();
   await processOfficialGame(room,game,result);
 });
+
+// Segunda garantía independiente para que una final completada nunca quede sin copa.
+// applyTournamentWin es idempotente: si el cierre normal ya la acreditó, no suma de nuevo.
+exports.recordTournamentChampion=onValueCreated(
+  "/tournaments/{tournamentId}/winnerUid",
+  async event=>{
+    const tournamentId=cleanText(event.params.tournamentId,80);
+    const winnerUid=cleanText(event.data.val(),128);
+    if(!tournamentId || !winnerUid) return;
+    await applyTournamentWin(tournamentId,winnerUid);
+  }
+);
