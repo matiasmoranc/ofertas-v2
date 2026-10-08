@@ -1950,6 +1950,36 @@ header p{
 .pass-counter.blocked .pass-counter-text{
   color:#ffd45c;
 }
+.spectator-pass-counters{
+  margin-top:10px;
+  padding:10px 12px;
+  border-radius:12px;
+  background:rgba(0,0,0,.24);
+  border:1px solid rgba(255,255,255,.10);
+  text-align:center;
+}
+.spectator-pass-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:9px;
+}
+.spectator-pass-team{
+  min-width:0;
+  padding:9px 6px 8px;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.035);
+}
+.spectator-pass-team.team-a{border-color:rgba(78,168,255,.35)}
+.spectator-pass-team.team-b{border-color:rgba(255,86,106,.35)}
+.spectator-pass-team strong{
+  display:block;
+  margin-bottom:7px;
+  font-size:10px;
+  letter-spacing:.5px;
+}
+.spectator-pass-team .pass-counter-text{margin-top:6px}
+.spectator-pass-team.blocked .pass-counter-text{color:#ffd45c}
 
 .waiting-opponent{
   max-width:620px;
@@ -2320,6 +2350,29 @@ header p{
           <span id="passDot3" class="pass-dot"></span>
         </div>
         <div id="passCounterText" class="pass-counter-text">3 de 3</div>
+      </div>
+      <div id="spectatorPassCounters" class="spectator-pass-counters hidden" aria-live="polite">
+        <span class="pass-counter-label">PASES CONSECUTIVOS DISPONIBLES</span>
+        <div class="spectator-pass-grid">
+          <div id="spectatorPassTeamA" class="spectator-pass-team team-a">
+            <strong>🔵 AZUL</strong>
+            <div class="pass-dots" aria-hidden="true">
+              <span id="spectatorPassA1" class="pass-dot"></span>
+              <span id="spectatorPassA2" class="pass-dot"></span>
+              <span id="spectatorPassA3" class="pass-dot"></span>
+            </div>
+            <div id="spectatorPassAText" class="pass-counter-text">3 de 3</div>
+          </div>
+          <div id="spectatorPassTeamB" class="spectator-pass-team team-b">
+            <strong>🔴 ROJO</strong>
+            <div class="pass-dots" aria-hidden="true">
+              <span id="spectatorPassB1" class="pass-dot"></span>
+              <span id="spectatorPassB2" class="pass-dot"></span>
+              <span id="spectatorPassB3" class="pass-dot"></span>
+            </div>
+            <div id="spectatorPassBText" class="pass-counter-text">3 de 3</div>
+          </div>
+        </div>
       </div>
       <div id="message" class="message">Esperando al rival...</div>
     </main>
@@ -4990,7 +5043,31 @@ function updateTeamIntro(){
 
 function updatePassCounter(){
   const counter=$("passCounter");
+  const spectatorCounter=$("spectatorPassCounters");
   if(!counter) return;
+
+  counter.classList.toggle("hidden",isSpectator);
+  if(spectatorCounter) spectatorCounter.classList.toggle("hidden",!isSpectator);
+
+  if(isSpectator){
+    ["A","B"].forEach(team=>{
+      const used=Math.min(3,Math.max(0,gameState?.consecutivePasses?.[team] || 0));
+      const remaining=Math.max(0,3-used);
+      const extra=hasProtectedExtraPassState(gameState,team);
+
+      for(let i=1;i<=3;i++){
+        const dot=$(`spectatorPass${team}${i}`);
+        if(dot) dot.classList.toggle("used",i>remaining);
+      }
+
+      const text=$(`spectatorPass${team}Text`);
+      if(text) text.textContent=extra ? "1 pase extra habilitado" : `${remaining} de 3`;
+
+      const teamCard=$(`spectatorPassTeam${team}`);
+      if(teamCard) teamCard.classList.toggle("blocked",remaining===0 && !extra);
+    });
+    return;
+  }
 
   const team=myTeam;
   const used=team ? Math.min(3,Math.max(0,gameState?.consecutivePasses?.[team] || 0)) : 0;
